@@ -26,9 +26,6 @@ public class PriorityTrackHelper {
         }
 
         MessageHelper.sendMessageToChannel(game.getActionsChannel(), sb);
-        // Full game player state
-        game.getPlayers().values().stream()
-            .forEach(p -> System.out.println("Player: " + p.getRepresentation() + ", Priority: " + p.getPriorityPosition()));
     }
 
     /*
@@ -36,10 +33,6 @@ public class PriorityTrackHelper {
      * gets priority 2, etc.
      */
     public static void AssignPlayerToPriority(Game game, Player player, int priority) {
-        // Full game player state
-        System.out.println("Start of AssignPlayerToPriority");
-        game.getPlayers().values().stream()
-            .forEach(p -> System.out.println("Player: " + p.getRepresentation() + ", Priority: " + p.getPriorityPosition()));
         if(priority < 1) {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority must be a positive integer.");
             return;
@@ -54,6 +47,9 @@ public class PriorityTrackHelper {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Player not found in the game.");
             return;
         }
+
+        var messageOutput = "";
+
         // If another player already has this priority value, clear it
         var existingIndex = players.stream()
             .filter(p -> p.hasPriorityPosition() && p.getPriorityPosition() == priority)
@@ -61,19 +57,14 @@ public class PriorityTrackHelper {
         if(existingIndex.isPresent()) {
             var existingPlayer = existingIndex.get();
             existingPlayer.setPriorityPosition(-1); // Clear the existing player's priority
-            MessageHelper.sendMessageToChannel(game.getActionsChannel(),
-                    existingPlayer.getRepresentation() + " has been removed from position " + priority + " on the priority track.");
+            messageOutput += existingPlayer.getRepresentation() + " has been removed from position " + priority + " on the priority track.\n";
         }
+
         // Assign the player's priority
         player.setPriorityPosition(priority);
-        System.out.println("End of AssignPlayerToPriority");
-        System.out.println("Assigned player " + player.getRepresentation() + " to priority " + player.getPriorityPosition());
-        // Full game player state
-        game.getPlayers().values().stream()
-            .forEach(p -> System.out.println("Player: " + p.getRepresentation() + ", Priority: " + p.getPriorityPosition()));
-        MessageHelper.sendMessageToChannel(game.getActionsChannel(),
-                player.getRepresentation() + " has been " + (existingIndex.isPresent() ? "moved" : "added") +
-                        " to position " + priority + " on the priority track.");
+        messageOutput += player.getRepresentation() + " has been assigned to position " + priority + " on the priority track.";
+
+        MessageHelper.sendMessageToChannel(game.getActionsChannel(), messageOutput);
     }
 
     public static void ClearPriorityTrack(Game game) {
@@ -83,8 +74,5 @@ public class PriorityTrackHelper {
         }
 
         MessageHelper.sendMessageToChannel(game.getActionsChannel(), "The priority track has been cleared.");
-        // Full game player state
-        game.getPlayers().values().stream()
-            .forEach(p -> System.out.println("Player: " + p.getRepresentation() + ", Priority: " + p.getPriorityPosition()));
     }
 }
