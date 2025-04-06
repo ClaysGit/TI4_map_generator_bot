@@ -1,5 +1,7 @@
 package ti4.helpers.omegaPhase;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import ti4.map.Game;
@@ -32,13 +34,13 @@ public class PriorityTrackHelper {
      * Priority is 1-indexed, so the first player gets priority 1, the second player
      * gets priority 2, etc.
      */
-    public static void AssignPlayerToPriority(Game game, Player player, int priority) {
-        if (priority < -1) {
+    public static void AssignPlayerToPriority(Game game, Player player, Integer priority) {
+        if (priority != null && priority < -1) {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority must be between 1 and the number of players (or just -1).");
             return;
         }
         var players = game.getPlayers().values();
-        if (priority > players.size()) {
+        if (priority != null && priority > players.size()) {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority cannot exceed the number of players.");
             return;
         }
@@ -60,9 +62,28 @@ public class PriorityTrackHelper {
             messageOutput += existingPlayer.getRepresentation() + " has been removed from position " + priority + " on the priority track.\n";
         }
 
-        if (priority > 0) {
+        Integer assignedPriority = priority;
+        if (assignedPriority == null) {
+            var currentPriotityTrack = getPriorityTrack(game);
+            for (var i = 0; i < currentPriotityTrack.size(); i++) {
+                if (currentPriotityTrack.get(i) == null) {
+                    // Found an empty spot, assign the player here
+                    assignedPriority = i + 1; // 1-indexed
+                    break;
+                }
+            }
+            if (assignedPriority == null) {
+                // If no empty spot was found, keep the player off the track
+                player.setPriorityPosition(-1);
+                messageOutput += player.getRepresentation() + " could not be placed on the priority track because no empty spot was availble.\n";
+                MessageHelper.sendMessageToChannel(game.getActionsChannel(), messageOutput);
+                return;
+            }
+        }
+
+        if (assignedPriority > 0) {
             // Assign the player's priority
-            player.setPriorityPosition(priority);
+            player.setPriorityPosition(assignedPriority);
             messageOutput += player.getRepresentation() + " has been assigned to position " + priority + " on the priority track.";
         }
 
@@ -81,5 +102,22 @@ public class PriorityTrackHelper {
         }
 
         MessageHelper.sendMessageToChannel(game.getActionsChannel(), "The priority track has been cleared.");
+    }
+
+    public static List<Player> getPriorityTrack(Game game) {
+        List<Player> priorityTrack = new ArrayList<>();
+        int numPlayers = game.getPlayers().size();
+        for (int i = 0; i < numPlayers; i++) {
+            priorityTrack.add(null);
+        }
+
+        for (Player player : game.getPlayers().values()) {
+            int position = player.getPriorityPosition();
+            if (position > 0 && position <= numPlayers) {
+                priorityTrack.set(position - 1, player);
+            }
+        }
+
+        return priorityTrack;
     }
 }
