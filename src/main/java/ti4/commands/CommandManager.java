@@ -120,8 +120,7 @@ public class CommandManager {
         new SelectionBoxDemoCommand(),
         new UserCommand(),
         new TIGLCommand(),
-        new OmegaPhaseCommand()
-    ).collect(Collectors.toMap(ParentCommand::getName, command -> command));
+        new OmegaPhaseCommand()).collect(Collectors.toMap(ParentCommand::getName, command -> command));
 
     public static ParentCommand getCommand(String name) {
         return commands.get(name);

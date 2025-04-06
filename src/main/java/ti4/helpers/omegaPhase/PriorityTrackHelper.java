@@ -12,15 +12,11 @@ public class PriorityTrackHelper {
     public static void PrintPriorityTrack(Game game) {
         var sb = "**Priority Track**\n";
 
-        var players = game.getPlayers().values();
-        var priorityMap = players.stream()
-            .filter(p -> p.hasPriorityPosition())
-            .collect(Collectors.toMap(Player::getPriorityPosition, (player) -> player));
-
-        for (var i = 0; i < players.size(); i++) {
+        var priorityTrack = GetPriorityTrack(game);
+        for (var i = 0; i < priorityTrack.size(); i++) {
             int priority = i + 1;
-            if (priorityMap.containsKey(priority)) {
-                var player = priorityMap.get(priority);
+            if (priorityTrack.get(i) != null) {
+                var player = priorityTrack.get(i);
                 sb += String.format("%d. %s\n", priority, player.getRepresentation());
             } else {
                 sb += String.format("%d.\n", priority);
@@ -71,7 +67,14 @@ public class PriorityTrackHelper {
                 }
             }
         } else {
-            var currentPriotityTrack = getPriorityTrack(game);
+            if (player.hasPriorityPosition()) {
+                // If the player already has a priority position, we don't need to assign them again
+                messageOutput += player.getRepresentation() + " is already on the priority track at position " + player.getPriorityPosition() + ".\n";
+                MessageHelper.sendMessageToChannel(game.getActionsChannel(), messageOutput);
+                return;
+            }
+
+            var currentPriotityTrack = GetPriorityTrack(game);
             for (var i = 0; i < currentPriotityTrack.size(); i++) {
                 if (currentPriotityTrack.get(i) == null) {
                     // Found an empty spot, assign the player here
@@ -81,7 +84,7 @@ public class PriorityTrackHelper {
             }
             if (priority == null) {
                 // If no empty spot was found, return early with message
-                player.setPriorityPosition(-1);
+                player.setPriorityPosition(-1); // Ensure data model matches inferred state
                 messageOutput += player.getRepresentation() + " could not be placed on the priority track because no empty spot was availble.\n";
                 MessageHelper.sendMessageToChannel(game.getActionsChannel(), messageOutput);
                 return;
@@ -113,7 +116,7 @@ public class PriorityTrackHelper {
         MessageHelper.sendMessageToChannel(game.getActionsChannel(), "The priority track has been cleared.");
     }
 
-    public static List<Player> getPriorityTrack(Game game) {
+    public static List<Player> GetPriorityTrack(Game game) {
         List<Player> priorityTrack = new ArrayList<>();
         int numPlayers = game.getPlayers().size();
         for (int i = 0; i < numPlayers; i++) {

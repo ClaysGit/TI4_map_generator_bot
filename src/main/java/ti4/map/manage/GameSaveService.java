@@ -796,7 +796,7 @@ class GameSaveService {
                 writer.write(System.lineSeparator());
             }
 
-            if(player.hasPriorityPosition()) {
+            if (player.hasPriorityPosition()) {
                 writer.write(Constants.PRIORITY_TRACK + " " + player.getPriorityPosition());
                 writer.write(System.lineSeparator());
             }
