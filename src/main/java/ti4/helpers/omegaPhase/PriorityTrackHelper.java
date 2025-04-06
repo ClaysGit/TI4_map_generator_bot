@@ -35,45 +35,52 @@ public class PriorityTrackHelper {
      * gets priority 2, etc.
      */
     public static void AssignPlayerToPriority(Game game, Player player, Integer priority) {
-        if (priority != null && priority < -1) {
-            MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority must be between 1 and the number of players (or just -1).");
-            return;
-        }
-        var players = game.getPlayers().values();
-        if (priority != null && priority > players.size()) {
-            MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority cannot exceed the number of players.");
-            return;
-        }
         // Ensure player exists in the game
+        var players = game.getPlayers().values();
         if (players.stream().noneMatch(p -> p.getUserID() == player.getUserID())) {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Player not found in the game.");
             return;
         }
 
         var messageOutput = "";
+        if (priority != null) {
+            if (priority < -1) {
+                MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority must be between 1 and the number of players (or just -1).");
+                return;
+            }
 
-        // If another player already has this priority value, clear it
-        var existingIndex = players.stream()
-            .filter(p -> p.hasPriorityPosition() && p.getPriorityPosition() == priority)
-            .findFirst();
-        if (existingIndex.isPresent()) {
-            var existingPlayer = existingIndex.get();
-            existingPlayer.setPriorityPosition(-1); // Clear the existing player's priority
-            messageOutput += existingPlayer.getRepresentation() + " has been removed from position " + priority + " on the priority track.\n";
-        }
+            if (priority > players.size()) {
+                MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority cannot exceed the number of players.");
+                return;
+            }
 
-        Integer assignedPriority = priority;
-        if (assignedPriority == null) {
+            if (priority == 0) {
+                priority = -1;
+            }
+
+            // If another player already has this priority value, clear it
+            if (priority != -1) {
+                int immutablePriority = priority;
+                var existingIndex = players.stream()
+                    .filter(p -> p.hasPriorityPosition() && p.getPriorityPosition() == immutablePriority)
+                    .findFirst();
+                if (existingIndex.isPresent()) {
+                    var existingPlayer = existingIndex.get();
+                    existingPlayer.setPriorityPosition(-1); // Clear the existing player's priority
+                    messageOutput += existingPlayer.getRepresentation() + " has been removed from position " + priority + " on the priority track.\n";
+                }
+            }
+        } else {
             var currentPriotityTrack = getPriorityTrack(game);
             for (var i = 0; i < currentPriotityTrack.size(); i++) {
                 if (currentPriotityTrack.get(i) == null) {
                     // Found an empty spot, assign the player here
-                    assignedPriority = i + 1; // 1-indexed
+                    priority = i + 1; // 1-indexed
                     break;
                 }
             }
-            if (assignedPriority == null) {
-                // If no empty spot was found, keep the player off the track
+            if (priority == null) {
+                // If no empty spot was found, return early with message
                 player.setPriorityPosition(-1);
                 messageOutput += player.getRepresentation() + " could not be placed on the priority track because no empty spot was availble.\n";
                 MessageHelper.sendMessageToChannel(game.getActionsChannel(), messageOutput);
@@ -81,14 +88,16 @@ public class PriorityTrackHelper {
             }
         }
 
-        if (assignedPriority > 0) {
+        if (priority > 0) {
             // Assign the player's priority
-            player.setPriorityPosition(assignedPriority);
+            player.setPriorityPosition(priority);
             messageOutput += player.getRepresentation() + " has been assigned to position " + priority + " on the priority track.";
-        }
-
-        if (messageOutput.isEmpty()) {
-            // If no message was generated, it means the player was to be removed, but was already off the track
+        } else if (priority < 1 && player.hasPriorityPosition()) {
+            // If priority is -1, remove the player from the priority track
+            player.setPriorityPosition(-1);
+            messageOutput += player.getRepresentation() + " has been removed from the priority track.";
+        } else {
+            // The player was to be removed, but was already off the track
             messageOutput = player.getRepresentation() + " is not on the priority track.";
         }
 
