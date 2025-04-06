@@ -15,9 +15,9 @@ public class PriorityTrackHelper {
             .filter(p -> p.hasPriorityPosition())
             .collect(Collectors.toMap(Player::getPriorityPosition, (player) -> player));
 
-        for(var i = 0; i < players.size(); i++) {
+        for (var i = 0; i < players.size(); i++) {
             int priority = i + 1;
-            if(priorityMap.containsKey(priority)) {
+            if (priorityMap.containsKey(priority)) {
                 var player = priorityMap.get(priority);
                 sb += String.format("%d. %s\n", priority, player.getRepresentation());
             } else {
@@ -33,17 +33,17 @@ public class PriorityTrackHelper {
      * gets priority 2, etc.
      */
     public static void AssignPlayerToPriority(Game game, Player player, int priority) {
-        if(priority < 1) {
-            MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority must be a positive integer.");
+        if (priority < -1) {
+            MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority must be between 1 and the number of players (or just -1).");
             return;
         }
         var players = game.getPlayers().values();
-        if(priority > players.size()) {
+        if (priority > players.size()) {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Priority cannot exceed the number of players.");
             return;
         }
         // Ensure player exists in the game
-        if(players.stream().noneMatch(p -> p.getUserID() == player.getUserID())) {
+        if (players.stream().noneMatch(p -> p.getUserID() == player.getUserID())) {
             MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Player not found in the game.");
             return;
         }
@@ -54,22 +54,29 @@ public class PriorityTrackHelper {
         var existingIndex = players.stream()
             .filter(p -> p.hasPriorityPosition() && p.getPriorityPosition() == priority)
             .findFirst();
-        if(existingIndex.isPresent()) {
+        if (existingIndex.isPresent()) {
             var existingPlayer = existingIndex.get();
             existingPlayer.setPriorityPosition(-1); // Clear the existing player's priority
             messageOutput += existingPlayer.getRepresentation() + " has been removed from position " + priority + " on the priority track.\n";
         }
 
-        // Assign the player's priority
-        player.setPriorityPosition(priority);
-        messageOutput += player.getRepresentation() + " has been assigned to position " + priority + " on the priority track.";
+        if (priority > 0) {
+            // Assign the player's priority
+            player.setPriorityPosition(priority);
+            messageOutput += player.getRepresentation() + " has been assigned to position " + priority + " on the priority track.";
+        }
+
+        if (messageOutput.isEmpty()) {
+            // If no message was generated, it means the player was to be removed, but was already off the track
+            messageOutput = player.getRepresentation() + " is not on the priority track.";
+        }
 
         MessageHelper.sendMessageToChannel(game.getActionsChannel(), messageOutput);
     }
 
     public static void ClearPriorityTrack(Game game) {
         var players = game.getPlayers().values();
-        for(var player : players) {
+        for (var player : players) {
             player.setPriorityPosition(-1);
         }
 

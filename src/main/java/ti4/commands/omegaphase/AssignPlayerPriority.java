@@ -13,10 +13,10 @@ class AssignPlayerPriority extends GameStateSubcommand {
     public AssignPlayerPriority() {
         super(Constants.ASSIGN_PLAYER_PRIORITY, "Assign a player's position on the Priority Track", true, true);
         addOptions(
-                new OptionData(OptionType.INTEGER, Constants.PRIORITY_POSITION, "New priority position (1 - 8)", true))
+            new OptionData(OptionType.INTEGER, Constants.PRIORITY_POSITION, "Position on priority track (assign -1 to remove them from the track)", true))
                 .addOptions(new OptionData(OptionType.USER, Constants.PLAYER, "Player for which you set stats"))
                 .addOptions(new OptionData(OptionType.STRING, Constants.FACTION_COLOR,
-                        "Set stats for another Faction or Color")
+                    "Set stats for another Faction or Color")
                         .setAutoComplete(true));
     }
 
@@ -26,8 +26,8 @@ class AssignPlayerPriority extends GameStateSubcommand {
         var player = getPlayer();
         var maxPosition = game.getPlayers().size();
         var newPosition = event.getOption(Constants.PRIORITY_POSITION, null, OptionMapping::getAsInt);
-        if (newPosition < 1 || newPosition > maxPosition) {
-            MessageHelper.sendMessageToChannel(event.getChannel(), "Priority position must be between 1 and " + maxPosition + ".");
+        if (newPosition < -1 || newPosition > maxPosition) {
+            MessageHelper.sendMessageToChannel(event.getChannel(), "Priority position must be between 1 and " + maxPosition + ", or -1 to remove them.");
             return;
         }
 
