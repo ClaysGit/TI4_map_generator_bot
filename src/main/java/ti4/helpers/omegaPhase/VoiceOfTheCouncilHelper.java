@@ -24,13 +24,9 @@ public class VoiceOfTheCouncilHelper {
 
     public static void ElectVoiceOfTheCouncil(Game game, Player player) {
         var lawID = game.getLaws().get(Constants.VOICE_OF_THE_COUNCIL_ID);
-        if (lawID == null) {
-            System.out.println("Law ID is null, cannot elect Voice of the Council.");
-            return;
-        }
         var poID = game.getRevealedPublicObjectives().get(Constants.VOICE_OF_THE_COUNCIL_PO);
-        if (poID == null) {
-            System.out.println("Public Objective ID is null, cannot elect Voice of the Council.");
+        if (lawID == null || poID == null) {
+            MessageHelper.sendMessageToChannel(game.getActionsChannel(), "Cannot elect Voice of the Council; missing Agenda or custom Public Ojbective. Consider running \"/omegaphase reset_voice_of_the_council\".");
             return;
         }
 
