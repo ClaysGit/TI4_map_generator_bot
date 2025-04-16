@@ -47,6 +47,7 @@ import ti4.helpers.ComponentActionHelper;
 import ti4.helpers.Constants;
 import ti4.helpers.ExploreHelper;
 import ti4.helpers.Helper;
+import ti4.helpers.ObjectiveHelper;
 import ti4.helpers.PlayerPreferenceHelper;
 import ti4.helpers.PromissoryNoteHelper;
 import ti4.helpers.RelicHelper;
@@ -1074,7 +1075,17 @@ public class UnfiledButtonHandlers { // TODO: move all of these methods to a bet
             }
         }
 
-        StartPhaseService.startStatusHomework(event, game);
+        if (!game.isOmegaPhaseMode()) {
+            StartPhaseService.startStatusHomework(event, game);
+        } else {
+            var speakerPlayer = game.getSpeaker();
+            ObjectiveHelper.secondHalfOfPeakStage1(game, speakerPlayer, 1);
+            String message = "The next Objective has been revealed to " + speakerPlayer.getRepresentation() + ". When ready, proceed to the Strategy Phase.";
+            Button proceedToStrategyPhase = Buttons.green("proceed_to_strategy",
+                "Proceed to Strategy Phase (will refresh all cards and ping the priority player)");
+            MessageHelper.sendMessageToChannelWithButton(event.getChannel(), message, proceedToStrategyPhase);
+        }
+
         ButtonHelper.deleteMessage(event);
     }
 
@@ -1857,7 +1868,8 @@ public class UnfiledButtonHandlers { // TODO: move all of these methods to a bet
                         buttons.add(drawStage2);
                     }
                 }
-                if (game.getRound() > (game.isOmegaPhaseMode() ? 9 : 7) || game.getPublicObjectives2Peakable().isEmpty()) {
+                var endGameDeck = game.isOmegaPhaseMode() ? game.getPublicObjectives2Peakable() : game.getPublicObjectives1Peakable();
+                if (game.getRound() > (game.isOmegaPhaseMode() ? 9 : 7) || endGameDeck.isEmpty()) {
                     if (game.isFowMode()) {
                         message2 += "\n> - If there are no more objectives to reveal, use the button to continue as is.";
                         message2 += " Or end the game manually.";
