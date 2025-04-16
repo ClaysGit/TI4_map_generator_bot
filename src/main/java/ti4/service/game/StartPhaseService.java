@@ -371,6 +371,7 @@ public class StartPhaseService {
                 firstSCPicker = Helper.getSpeakerOrderFromThisPlayer(firstSCPicker, game).get(1);
             }
         } else {
+            PriorityTrackHelper.PrintPriorityTrack(game);
             var priorityTrack = PriorityTrackHelper.GetPriorityTrack(game);
             var firstInPriorityOrder = priorityTrack.stream()
                 .filter(Objects::nonNull)

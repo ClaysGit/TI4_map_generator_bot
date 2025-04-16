@@ -131,4 +131,19 @@ public class PriorityTrackHelper {
 
         return priorityTrack;
     }
+
+    public static void CreateDefaultPriorityTrack(Game game) {
+        var playerQueue = game.getRealPlayers().stream()
+            .filter(p -> !p.hasPriorityPosition());
+
+        var currentPriorityTrack = GetPriorityTrack(game);
+        for (var i = 0; i < currentPriorityTrack.size(); i++) {
+            if (currentPriorityTrack.get(i) == null) {
+                var player = playerQueue.findFirst().orElse(null);
+                if (player != null) {
+                    player.setPriorityPosition(i + 1);
+                }
+            }
+        }
+    }
 }
