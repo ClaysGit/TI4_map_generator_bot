@@ -2821,6 +2821,11 @@ public class AgendaHelper {
             .mapToInt(Planet::getInfluence).sum();
         int voteCount = baseInfluenceCount; // default
 
+        //HACK: Skip voting in Omega Phase until automation is implemented
+        if (game.isOmegaPhaseMode()) {
+            return 0;
+        }
+
         // NEKRO unless XXCHA ALLIANCE
         if (player.hasAbility("galactic_threat")
             && !game.playerHasLeaderUnlockedOrAlliance(player, "xxchacommander")) {
