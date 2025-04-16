@@ -2129,6 +2129,14 @@ public class AgendaHelper {
             voteCount = 0;
         }
 
+        //HACK: While the Omega Phase agenda automation isn't in the game,
+        // make players resolve voting manually.
+        //This is accomplished by effectively abstaining everyone, so the Speaker
+        // can directly resolve the agenda after all manual tallying/effects.
+        if (game.isOmegaPhaseMode()) {
+            voteCount = 0;
+        }
+
         return new int[] { voteCount, hasXxchaHero, hasXxchaAlliance };
     }
 

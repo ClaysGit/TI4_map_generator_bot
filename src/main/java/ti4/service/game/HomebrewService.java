@@ -10,7 +10,8 @@ import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import ti4.buttons.Buttons;
 import ti4.helpers.ButtonHelper;
 import ti4.helpers.Constants;
-//import ti4.helpers.omegaPhase.VoiceOfTheCouncilHelper;
+import ti4.helpers.omegaPhase.OmegaPhaseModStatusHelper;
+import ti4.helpers.omegaPhase.VoiceOfTheCouncilHelper;
 import ti4.image.Mapper;
 import ti4.listeners.annotations.ButtonHandler;
 import ti4.map.Game;
@@ -187,10 +188,18 @@ public class HomebrewService {
                 }
                 game.setOmegaPhaseMode(true);
                 game.validateAndSetPublicObjectivesStage1Deck(event, Mapper.getDeck("public_stage_1_objectives_omegaphase"));
+                game.setUpPeakableObjectives(9, 1);
+                game.shuffleInBottomObjective(Constants.IMPERIUM_REX_ID, 5, 1);
                 game.setUpPeakableObjectives(0, 2);
                 game.validateAndSetPublicObjectivesStage2Deck(event, Mapper.getDeck("public_stage_2_objectives_omegaphase"));
-                //VoiceOfTheCouncilHelper.ResetVoiceOfTheCouncil(game);
-                MessageHelper.sendMessageToChannel(event.getMessageChannel(), "Enabled Omega Phase homebrew mode.");
+                //Temporary measure: Remove incompatible components
+                game.removeACFromGame("hack");
+                game.removeAgendaFromGame("incentive");
+                game.getSecretObjectives().remove("dtd");
+                //end
+
+                VoiceOfTheCouncilHelper.ResetVoiceOfTheCouncil(game);
+                OmegaPhaseModStatusHelper.PrintGreeting(game);
             }
         }
     }
