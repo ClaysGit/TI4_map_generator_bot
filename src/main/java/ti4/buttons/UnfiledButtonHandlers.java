@@ -1886,7 +1886,7 @@ public class UnfiledButtonHandlers { // TODO: move all of these methods to a bet
                 MessageHelper.sendMessageToChannelWithButtons(event.getChannel(), message2, buttons);
             }
             case "pass_on_abilities" -> {
-                if (game.isCustodiansScored()) {
+                if (game.isCustodiansScored() || game.isOmegaPhaseMode()) {
                     Button flipAgenda = Buttons.blue("flip_agenda", "Flip Agenda");
                     List<Button> buttons = List.of(flipAgenda);
                     MessageHelper.sendMessageToChannelWithButtons(event.getChannel(), "Please flip agenda now,",
