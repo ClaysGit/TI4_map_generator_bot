@@ -1869,8 +1869,9 @@ public class UnfiledButtonHandlers { // TODO: move all of these methods to a bet
                         buttons.add(drawStage2);
                     }
                 }
-                var endGameDeck = game.isOmegaPhaseMode() ? game.getPublicObjectives2Peakable() : game.getPublicObjectives1Peakable();
-                if (game.getRound() > (game.isOmegaPhaseMode() ? 9 : 7) || endGameDeck.isEmpty()) {
+                var endGameDeck = game.isOmegaPhaseMode() ? game.getPublicObjectives1Peakable() : game.getPublicObjectives2Peakable();
+                var endGameRound = game.isOmegaPhaseMode() ? 9 : 7;
+                if (game.getRound() > endGameRound || endGameDeck.isEmpty()) {
                     if (game.isFowMode()) {
                         message2 += "\n> - If there are no more objectives to reveal, use the button to continue as is.";
                         message2 += " Or end the game manually.";
@@ -1898,7 +1899,7 @@ public class UnfiledButtonHandlers { // TODO: move all of these methods to a bet
                 }
             }
             case "redistributeCCButtons" -> {
-                if (game.isCustodiansScored()) {
+                if (game.isCustodiansScored() || game.isOmegaPhaseMode()) {
                     // new RevealAgenda().revealAgenda(event, false, map, event.getChannel());
                     Button flipAgenda = Buttons.blue("flip_agenda", "Flip Agenda");
                     List<Button> buttons = List.of(flipAgenda);

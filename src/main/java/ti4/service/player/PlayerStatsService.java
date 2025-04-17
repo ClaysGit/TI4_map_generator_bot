@@ -120,11 +120,6 @@ public class PlayerStatsService {
             String messageToSend = ColorEmojis.getColorEmojiWithName(player.getColor()) + " picked " + Helper.getSCName(scNumber, game);
             FoWHelper.pingAllPlayersWithFullStats(game, event, player, messageToSend);
         }
-        if (game.isOmegaPhaseMode()) {
-            if (player.getSCs().size() >= game.getStrategyCardsPerPlayer()) {
-                PriorityTrackHelper.AssignPlayerToPriority(game, player, -1);
-            }
-        }
 
         StrategyCardModel scModel = game.getStrategyCardModelByInitiative(scNumber).orElse(null);
 
