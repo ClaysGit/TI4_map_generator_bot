@@ -21,6 +21,7 @@ import ti4.model.TileModel.TileBack;
 @UtilityClass
 public class NucleusDraftHelper {
     // When looking for wormholes to build with, look for tiles with these types.
+    //TODO: Are there other wormhole types we want to include? These would be natural types, not gamma or delta.
     private static final List<String> wormholeTypes = List.of("alpha", "beta");
 
     /**
@@ -340,7 +341,6 @@ public class NucleusDraftHelper {
     }
 
     private static List<MiltyDraftTile> getWormholeTiles(List<MiltyDraftTile> draftTiles) {
-        //TODO: Are there other wormhole types we want to include? These would be natural types, not gamma or delta.
         return draftTiles.stream()
             .filter(t -> t.getTile().getWormholes().stream().map(w -> w.toString()).anyMatch(wormholeTypes::contains))
             .toList();
