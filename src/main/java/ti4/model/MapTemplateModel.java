@@ -29,6 +29,9 @@ public class MapTemplateModel implements ModelInterface {
 
         // This is the position the tile should be on the map
         private String pos;
+
+        // Controls whether this tile is part of the map's Nucleus.
+        private Boolean nucleus;
     }
 
     private String alias;

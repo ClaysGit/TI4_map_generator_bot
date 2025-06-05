@@ -51,8 +51,13 @@ public class MiltyDraftManager {
     private List<String> draftOrder = new ArrayList<>(); // userID
     private List<String> players = new ArrayList<>(); // userID
     private List<String> factionDraft = new ArrayList<>();
+    private List<String> seats = new ArrayList<>(); //empty if unused
 
     private String mapTemplate;
+
+    //Does this need to be saved? In essence, does the draft manager, when instantiated outside of the immediate draft context,
+    // does the contents of the map template affect anything? Is it sufficient that the tiles on the game object are set correctly?
+    private Boolean nucleusDraft;
 
     private boolean finished;
 
@@ -62,8 +67,16 @@ public class MiltyDraftManager {
         private MiltyDraftSlice slice;
         private Integer position;
 
+        //Conditional seat draft info
+        private Boolean draftingSeats = false;
+        private String seat;
+
         public String summary(String doggy) {
-            return String.join(" ", factionEmoji(doggy), sliceEmoji(), positionEmoji());
+            if (draftingSeats) {
+                return String.join(" ", factionEmoji(doggy), sliceEmoji(), positionEmoji(), seatEmoji());
+            } else {
+                return String.join(" ", factionEmoji(doggy), sliceEmoji(), positionEmoji());
+            }
         }
 
         private String factionEmoji(String doggy) {
@@ -80,11 +93,20 @@ public class MiltyDraftManager {
             return MiltyDraftEmojis.getSpeakerPickEmoji(ord).toString();
         }
 
+        private String seatEmoji() {
+            if (seat == null || !draftingSeats) return "";
+            return MiltyDraftEmojis.getMiltyDraftEmoji(seat).toString();
+        }
+
         @JsonIgnore
         public String save() {
             String factionStr = faction == null ? "null" : faction;
             String sliceStr = slice == null ? "null" : slice.getName();
             String orderStr = position == null ? "null" : Integer.toString(position);
+            if (draftingSeats) {
+                String seatStr = seat == null ? "null" : seat;
+                return String.join(",", factionStr, sliceStr, orderStr, seatStr);
+            }
             return String.join(",", factionStr, sliceStr, orderStr);
         }
     }
@@ -166,6 +188,15 @@ public class MiltyDraftManager {
         }
     }
 
+    public void setSeatsDraft(List<String> seats) {
+        seats.clear();
+        seats.addAll(seats);
+        draft.values().forEach(pd -> {
+            pd.setDraftingSeats(true);
+            pd.setSeat(null); // Reset seat for all players
+        });
+    }
+
     public PlayerDraft getPlayerDraft(Player player) {
         return draft.get(player.getUserID());
     }
@@ -197,6 +228,13 @@ public class MiltyDraftManager {
             for (int i = 1; i <= players.size(); i++)
                 if (!isOrderTaken(i))
                     remaining.add(StringHelper.ordinal(i) + " pick");
+        }
+        if (!seats.isEmpty() && active.getSeat() == null) {
+            for (String seat : seats) {
+                if (!isSeatTaken(seat)) {
+                    remaining.add("Seat " + seat);
+                }
+            }
         }
         return remaining;
     }
@@ -257,6 +295,7 @@ public class MiltyDraftManager {
         draftOrder.clear();
         players.clear();
         factionDraft.clear();
+        seats.clear();
         draftIndex = 0;
     }
 
@@ -301,6 +340,17 @@ public class MiltyDraftManager {
     }
 
     @JsonIgnore
+    public boolean isSeatTaken(String seat) {
+        if (seats.isEmpty() || seat == null || seat.isBlank()) return false;
+        for (PlayerDraft pd : draft.values()) {
+            if (pd.getSeat() != null && pd.getSeat().equals(seat)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @JsonIgnore
     public void doMiltyPick(GenericInteractionCreateEvent event, Game game, String buttonID, Player player) {
         String userId = player.getUserID();
         MessageChannel mainGameChannel = game.getMainGameChannel();
@@ -327,6 +377,7 @@ public class MiltyDraftManager {
             case "slice" -> draftSlice(userId, item);
             case "faction" -> draftFaction(userId, item);
             case "order" -> draftSpeakerOrder(userId, item);
+            case "seat" -> draftSeat(userId, item);
             default -> "Error parsing milty button press: " + buttonID;
         };
 
@@ -349,6 +400,7 @@ public class MiltyDraftManager {
                 case "slice" -> "Slice " + item;
                 case "faction" -> Mapper.getFaction(item).getFactionTitle().replace("Keleres - Mentak", "Keleres");
                 case "order" -> StringHelper.ordinal(Integer.parseInt(item)) + " pick";
+                case "seat" -> "Seat " + item;
                 default -> "Error parsing milty button press: " + buttonID;
             } + "!";
             MessageHelper.sendMessageToChannel(mainGameChannel, drafted);
@@ -376,12 +428,27 @@ public class MiltyDraftManager {
             String fauxPlayerPick = null;
             Player nextDrafter = getCurrentDraftPlayer(game);
             PlayerDraft pd = getPlayerDraft(nextDrafter);
-            if (pd.getPosition() == null && pd.getFaction() != null && pd.getSlice() != null) {
+            List<String> missingPicks = new ArrayList<>();
+            if (pd.getFaction() == null) {
+                missingPicks.add("faction");
+            }
+            if (pd.getPosition() == null) {
+                missingPicks.add("order");
+            }
+            if (pd.getSlice() == null) {
+                missingPicks.add("slice");
+            }
+            if (!seats.isEmpty() && pd.getSeat() == null) {
+                missingPicks.add("seat");
+            }
+            if (missingPicks.size() == 1 && missingPicks.get(0).equals("order")) {
                 fauxPlayerPick = getAutoButtonID(getPositionButtons());
-            } else if (pd.getSlice() == null && pd.getFaction() != null && pd.getPosition() != null) {
+            } else if (missingPicks.size() == 1 && missingPicks.get(0).equals("slice")) {
                 fauxPlayerPick = getAutoButtonID(getSliceButtons());
-            } else if (pd.getFaction() == null && pd.getPosition() != null && pd.getSlice() != null) {
+            } else if (missingPicks.size() == 1 && missingPicks.get(0).equals("faction")) {
                 fauxPlayerPick = getAutoButtonID(getFactionButtons());
+            } else if (missingPicks.size() == 1 && missingPicks.get(0).equals("seat") && !seats.isEmpty()) {
+                fauxPlayerPick = getAutoButtonID(getSeatButtons());
             }
 
             if (fauxPlayerPick != null) {
@@ -441,6 +508,18 @@ public class MiltyDraftManager {
         return null;
     }
 
+    private String draftSeat(String player, String seat) {
+        PlayerDraft current = getPlayerDraft(player);
+        if (seats.isEmpty()) return "You cannot draft a seat in this draft. Try again.";
+        if (current.getSeat() != null) return "You have already picked a seat. Try again.";
+        if (isSeatTaken(seat)) return "Seat " + seat + " has already been drafted. Try again.";
+        if (!seats.contains(seat)) return "This seat (" + seat + ") doesn't seem to exist. Try again.";
+
+        // Success
+        current.setSeat(seat);
+        return null;
+    }
+
     public List<Button> getSliceButtons() {
         List<Button> sliceButtons = new ArrayList<>();
         for (MiltyDraftSlice slice : getSlices()) {
@@ -471,6 +550,16 @@ public class MiltyDraftManager {
             orderButtons.add(Buttons.green("milty_order_" + speakerOrder, " ", MiltyDraftEmojis.getSpeakerPickEmoji(speakerOrder)));
         }
         return orderButtons;
+    }
+
+    public List<Button> getSeatButtons() {
+        List<Button> seatButtons = new ArrayList<>();
+        if (seats.isEmpty()) return seatButtons;
+        for (String seat : seats) {
+            if (isSeatTaken(seat)) continue;
+            seatButtons.add(Buttons.green("milty_seat_" + seat, " ", MiltyDraftEmojis.getMiltyDraftEmoji(seat)));
+        }
+        return seatButtons;
     }
 
     public String getOverallSummaryString(Game game) {
@@ -504,11 +593,12 @@ public class MiltyDraftManager {
         try {
             String sliceStr = String.join(";", slices.stream().map(MiltyDraftSlice::ttsString).toList());
             String factionStr = String.join(",", factionDraft);
+            String seatStr = "seats:" + String.join(",", seats);
             String playerStr = String.join(",", players);
             String picksStr = String.join(";", players.stream().map(p -> getPlayerDraft(p).save()).toList());
             String templateStr = getMapTemplate();
 
-            List<String> lesserSaves = Arrays.asList(sliceStr, factionStr, playerStr, picksStr, /* messagesStr, */ templateStr);
+            List<String> lesserSaves = Arrays.asList(sliceStr, factionStr, seatStr, playerStr, picksStr, /* messagesStr, */ templateStr);
             return String.join("|", lesserSaves);
         } catch (Exception e) {
             return "error";
@@ -533,8 +623,21 @@ public class MiltyDraftManager {
         List<String> factions = new ArrayList<>(Arrays.asList(factionStr.split(",")));
         setFactionDraft(factions);
 
+        // Possible Seats
+        String seatToken = bigTokenizer.nextToken();
+        String playersStr;
+        if (seatToken.startsWith("seats:")) {
+            String seatsStr = seatToken.substring(6); // Remove "seats:"
+            List<String> seats = new ArrayList<>(Arrays.asList(seatsStr.split(",")));
+            setSeatsDraft(seats);
+            playersStr = bigTokenizer.nextToken();
+        } else {
+            setSeats(new ArrayList<>()); // No seats drafted, so clear the seats
+            playersStr = seatToken; // If no seats, this is actually the players string
+        }
+
         // Players
-        String playersStr = bigTokenizer.nextToken();
+        //String playersStr = bigTokenizer.nextToken();
         List<String> players = new ArrayList<>(Arrays.asList(playersStr.split(",")));
         List<String> playersReversed = new ArrayList<>(players);
         Collections.reverse(playersReversed);

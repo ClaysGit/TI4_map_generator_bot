@@ -118,12 +118,13 @@ public class MiltySettings extends SettingsMenu {
     // Specific Implementation
     // ---------------------------------------------------------------------------------------------------------------------------------
     public enum DraftingMode {
-        none, milty, franken;
+        none, milty, nucleus, franken;
 
         public String show() {
             return switch (this) {
                 case none -> "Select a draft type to begin";
                 case milty -> "Milty Draft";
+                case nucleus -> "Nucleus Draft";
                 case franken -> ComponentSource.franken.toString();
                 default -> toString();
             };

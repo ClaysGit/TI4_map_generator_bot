@@ -126,6 +126,10 @@ public class MiltyService {
             specs.presetSlices = sliceSettings.getParsedSlices();
         }
 
+        // Alternate draft mode settings
+        specs.setGenerateNucleus(settings.getDraftMode().getValue() == MiltySettings.DraftingMode.nucleus);
+        specs.setDraftSeats(settings.getDraftMode().getValue() == MiltySettings.DraftingMode.nucleus);
+
         return startFromSpecs(event, specs);
     }
 
@@ -136,6 +140,7 @@ public class MiltyService {
         MiltyDraftManager draftManager = game.getMiltyDraftManager();
         draftManager.init(specs.tileSources);
         draftManager.setMapTemplate(specs.template.getAlias());
+        draftManager.setNucleusDraft(specs.getGenerateNucleus());
         game.setMapTemplateID(specs.template.getAlias());
         List<String> players = new ArrayList<>(specs.playerIDs);
         boolean staticOrder = specs.playerDraftOrder != null && !specs.playerDraftOrder.isEmpty();
@@ -145,6 +150,19 @@ public class MiltyService {
         }
         initDraftOrder(draftManager, players, staticOrder);
 
+        if (specs.getDraftSeats()) {
+            // Use the same letters/emoji as slices, but from the end of the alphabet
+            List<String> seats = new ArrayList<>();
+            int seatCount = specs.template.getPlayerCount();
+            for (int i = 0; i < seatCount; i++) {
+                String seat = ('Z' - ((seatCount - 1) - i)) + "";
+                seats.add(seat);
+            }
+            draftManager.setSeats(seats);
+        } else {
+            draftManager.setSeats(new ArrayList<>());
+        }
+
         // initialize factions
         List<String> unbannedFactions = new ArrayList<>(Mapper.getFactionsValues().stream()
             .filter(f -> specs.factionSources.contains(f.getSource()))
@@ -153,6 +171,18 @@ public class MiltyService {
             .map(FactionModel::getAlias).toList());
         List<String> factionDraft = createFactionDraft(specs.numFactions, unbannedFactions, specs.priorityFactions);
         draftManager.setFactionDraft(factionDraft);
+
+        if (specs.presetSlices != null && specs.getGenerateNucleus()) {
+            //TODO: handle this situation by validating the slice sizes
+            return "Could not start drafting. Nucleus drafting does not yet support preset slices.";
+        }
+
+        if (specs.getGenerateNucleus()) {
+            NucleusDistanceTool distanceTool = new NucleusDistanceTool(game, specs.template);
+            //TODO: Support natty nucleus templates. For now, we're just converting milty templates.
+            MapTemplateModel nucleusTemplate = NucleusDraftHelper.convertMiltyToNucleus(game, specs.template, distanceTool);
+            NucleusDraftHelper.createNucleus(game, draftManager, nucleusTemplate, distanceTool);
+        }
 
         // validate slice count + sources
         int redTiles = draftManager.getRed().size();
@@ -258,6 +288,8 @@ public class MiltyService {
 
         //other
         List<MiltyDraftSlice> presetSlices = null;
+        Boolean generateNucleus = false;
+        Boolean draftSeats = false;
 
         public DraftSpec(Game game) {
             this.game = game;

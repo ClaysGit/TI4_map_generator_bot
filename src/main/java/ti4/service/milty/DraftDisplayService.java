@@ -32,6 +32,7 @@ public class DraftDisplayService {
     private static final String SLICES = "**__Slices:__**";
     private static final String FACTIONS = "**__Factions:__**";
     private static final String POSITION = "**__Speaker Order:__**";
+    private static final String SEATS = "**__Seats:__**";
     private static final String SUMMARY_START = "# **__Draft Picks So Far__**:";
 
     public void updateDraftInformation(GenericInteractionCreateEvent event, MiltyDraftManager manager, Game game, String category) {
@@ -51,6 +52,9 @@ public class DraftDisplayService {
         MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, SLICES, manager.getSliceButtons());
         MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, FACTIONS, manager.getFactionButtons());
         MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, POSITION, manager.getPositionButtons());
+        if (!manager.getSeats().isEmpty()) {
+            MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, SEATS, manager.getSeatButtons());
+        }
         pingCurrentDraftPlayer(event, manager, game, true);
     }
 
@@ -88,12 +92,14 @@ public class DraftDisplayService {
             case "slice" -> txt.equals(SLICES);
             case "faction" -> txt.equals(FACTIONS);
             case "order" -> txt.equals(POSITION);
+            case "seat" -> txt.equals(SEATS);
             default -> false;
         };
         List<Button> categoryButtons = switch (category) {
             case "slice" -> manager.getSliceButtons();
             case "faction" -> manager.getFactionButtons();
             case "order" -> manager.getPositionButtons();
+            case "seat" -> manager.getSeatButtons();
             default -> List.of();
         };
         String newSummary = manager.getOverallSummaryString(game);
