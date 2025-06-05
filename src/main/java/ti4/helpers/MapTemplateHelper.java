@@ -178,7 +178,7 @@ public class MapTemplateHelper {
             }
         }
 
-        if (somethingHappened) {
+        if (somethingHappened && event != null) {
             ButtonHelper.updateMap(game, event);
         }
     }

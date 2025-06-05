@@ -36,13 +36,13 @@ public class NucleusDraftHelper {
         // - Unset the player/slice parameters
         // - Set the nucleus parameter to true
         Map<Integer, MapTemplateTile> playerNumberToHomeSystem = miltyTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getHome() == true && t.getPlayerNumber() != null)
+            .filter(t -> t.getHome() != null && t.getHome() && t.getPlayerNumber() != null)
             .collect(Collectors.toMap(MapTemplateTile::getPlayerNumber, t -> t));
         for (MapTemplateTile templateTile : miltyTemplate.getTemplateTiles()) {
             // Skip non-player tiles
             if (templateTile.getPlayerNumber() == null || templateTile.getStaticTileId() != null) continue;
             // Skip home systems
-            if (templateTile.getHome() != true) continue;
+            if (templateTile.getHome() != null && templateTile.getHome()) continue;
 
             // Check if the tile is one move away from the home system for the player
             MapTemplateTile homeTile = playerNumberToHomeSystem.get(templateTile.getPlayerNumber());
@@ -64,7 +64,7 @@ public class NucleusDraftHelper {
         int oldBluePerPlayer = miltyTemplate.getBluePerPlayer();
         int oldTilesPerPlayer = miltyTemplate.tilesPerPlayer();
         int newTilesPerPlayer = miltyTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getPlayerNumber() == 1 && t.getMiltyTileIndex() != null)
+            .filter(t -> t.getPlayerNumber() != null && t.getPlayerNumber() == 1 && t.getMiltyTileIndex() != null)
             .mapToInt(t -> 1)
             .sum();
         float oldBluePerPlayerRatio = (float) oldBluePerPlayer / oldTilesPerPlayer;
@@ -79,13 +79,14 @@ public class NucleusDraftHelper {
         List<String> emulatedTiles = miltyTemplate.getSliceEmulateTiles();
         String emulatedHomeSystem = emulatedTiles.stream()
             .filter(p -> miltyTemplate.getTemplateTiles().stream()
-                .anyMatch(t -> t.getPos().equals(p) && t.getHome() == true))
+                .anyMatch(t -> t.getPos().equals(p) && t.getHome() != null && t.getHome()))
             .findFirst().orElse(emulatedTiles.get(0));
         List<String> newEmulatedTiles = new ArrayList<>(List.of(emulatedHomeSystem));
         for (int i = 1; i < emulatedTiles.size(); ++i) {
             String tilePos = emulatedTiles.get(i);
             if (tilePos.equals(emulatedHomeSystem)) continue;
-            if (distanceTool.getNattyDistance(emulatedHomeSystem, tilePos) <= 1) {
+            Integer distance = distanceTool.getNattyDistance(emulatedHomeSystem, tilePos);
+            if (distance != null && distance <= 1) {
                 newEmulatedTiles.add(tilePos);
             }
         }
@@ -133,7 +134,7 @@ public class NucleusDraftHelper {
         //     - Repeat 50 times, and ultimately use the collection with the highest min distance
         // - Remove wormholes from the draft pool
         List<MapTemplateTile> nucleusTiles = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() == true)
+            .filter(t -> t.getNucleus() != null && t.getNucleus())
             .collect(Collectors.toList());
         int redBackedWormholes = 0;
         for (String wormholeType : wormholesPerType.keySet()) {
@@ -177,24 +178,25 @@ public class NucleusDraftHelper {
         }
         // - Determine how many red and blue tiles are still needed after wormhole placement
         int nucleusTileCount = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() == true)
+            .filter(t -> t.getNucleus() != null && t.getNucleus())
             .mapToInt(t -> 1)
             .sum();
         int maxRedTiles = (int) Math.ceil(nucleusTileCount / 2.0);
         int minRedTiles = maxRedTiles - 1;
         List<Integer> redTileCounts = IntStream.rangeClosed(minRedTiles, maxRedTiles)
             .boxed().collect(Collectors.toList());
+        //TODO: I'm abusing shuffle to randomly pick one thing a lot. Find or make a helper to do this better.
         Collections.shuffle(redTileCounts);
         int intendedRedTileCount = redTileCounts.get(0);
         int actualRedTileCount = Math.max(intendedRedTileCount, redBackedWormholes);
         int actualBlueTileCount = nucleusTileCount - actualRedTileCount;
         int redTilesPlaced = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() == true)
+            .filter(t -> t.getNucleus() != null && t.getNucleus())
             .map(t -> game.getTileByPosition(t.getPos()))
             .filter(t -> t != null && t.getTileModel().getTileBack() == TileBack.RED)
             .mapToInt(t -> 1).sum();
         int blueTilesPlaced = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() == true)
+            .filter(t -> t.getNucleus() != null && t.getNucleus())
             .map(t -> game.getTileByPosition(t.getPos()))
             .filter(t -> t != null && t.getTileModel().getTileBack() == TileBack.BLUE)
             .mapToInt(t -> 1).sum();
@@ -276,7 +278,7 @@ public class NucleusDraftHelper {
 
         //The red wormhole max is the smaller of red wormholes and red tiles needed
         int nucleusTileCount = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() == true)
+            .filter(t -> t.getNucleus() != null && t.getNucleus())
             .mapToInt(t -> 1)
             .sum();
         int maxRedTiles = (int) Math.ceil(nucleusTileCount / 2.0);
@@ -357,7 +359,7 @@ public class NucleusDraftHelper {
             .collect(Collectors.toList());
 
         List<String> availablePositions = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() == true && game.getTileByPosition(t.getPos()) == null)
+            .filter(t -> t.getNucleus() != null && t.getNucleus() && game.getTileByPosition(t.getPos()) == null)
             .map(MapTemplateTile::getPos)
             .collect(Collectors.toList());
         if (availablePositions.isEmpty()) {
