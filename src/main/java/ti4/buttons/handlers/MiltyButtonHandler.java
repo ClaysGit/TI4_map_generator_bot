@@ -13,4 +13,9 @@ class MiltyButtonHandler {
     public static void miltySetup(GenericInteractionCreateEvent event, Game game) {
         MiltyService.miltySetup(event, game);
     }
+
+    @ButtonHandler("nucleusSetup")
+    public static void nucleusSetup(GenericInteractionCreateEvent event, Game game) {
+        MiltyService.nucleusSetup(event, game);
+    }
 }

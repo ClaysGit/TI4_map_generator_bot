@@ -272,6 +272,14 @@ public class MiltyService {
         ButtonHelper.deleteMessage(event);
     }
 
+    public static void nucleusSetup(GenericInteractionCreateEvent event, Game game) {
+        MiltySettings menu = game.initializeMiltySettings();
+        menu.getDraftMode().setChosenKey("nucleus");
+        //TODO: Better setup handling, especially setting new defaults for slice richness based on the smaller slices
+        menu.postMessageAndButtons(event);
+        ButtonHelper.deleteMessage(event);
+    }
+
     @Data
     public static class DraftSpec {
         Game game;
