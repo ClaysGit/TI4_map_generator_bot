@@ -59,6 +59,37 @@ public class NucleusDraftHelper {
             }
         }
 
+        // Fix tiles per player
+        int oldBluePerPlayer = miltyTemplate.getBluePerPlayer();
+        int oldTilesPerPlayer = miltyTemplate.tilesPerPlayer();
+        int newTilesPerPlayer = miltyTemplate.getTemplateTiles().stream()
+            .filter(t -> t.getPlayerNumber() == 1 && t.getMiltyTileIndex() != null)
+            .mapToInt(t -> 1)
+            .sum();
+        float oldBluePerPlayerRatio = (float) oldBluePerPlayer / oldTilesPerPlayer;
+        int newBluePerPlayer = (int) Math.ceil(newTilesPerPlayer * oldBluePerPlayerRatio);
+        // Remember to exclude the home system tile from the count
+        int newRedPerPlayer = (newTilesPerPlayer - 1) - newBluePerPlayer;
+        miltyTemplate.setBluePerPlayer(newBluePerPlayer);
+        miltyTemplate.setRedPerPlayer(newRedPerPlayer);
+        miltyTemplate.setTilesPerPlayer(newTilesPerPlayer);
+
+        // Fix emulated tiles
+        List<String> emulatedTiles = miltyTemplate.getSliceEmulateTiles();
+        String emulatedHomeSystem = emulatedTiles.stream()
+            .filter(p -> miltyTemplate.getTemplateTiles().stream()
+                .anyMatch(t -> t.getPos().equals(p) && t.getHome() == true))
+            .findFirst().orElse(emulatedTiles.get(0));
+        List<String> newEmulatedTiles = new ArrayList<>(List.of(emulatedHomeSystem));
+        for (int i = 1; i < emulatedTiles.size(); ++i) {
+            String tilePos = emulatedTiles.get(i);
+            if (tilePos.equals(emulatedHomeSystem)) continue;
+            if (distanceTool.getNattyDistance(emulatedHomeSystem, tilePos) <= 1) {
+                newEmulatedTiles.add(tilePos);
+            }
+        }
+        miltyTemplate.setSliceEmulateTiles(newEmulatedTiles);
+
         return miltyTemplate;
     }
 
