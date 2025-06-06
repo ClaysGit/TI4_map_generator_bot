@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import lombok.experimental.UtilityClass;
+import ti4.image.TileHelper;
 import ti4.map.Game;
 import ti4.map.Tile;
 import ti4.message.BotLogger;
@@ -27,56 +28,74 @@ public class NucleusDraftHelper {
     /**
      * Convert a map template made for Milty drafting to one for Nucleus drafting. Also
      * adds Nucleus placeholder tiles to the template.
-     * @param game The game which the draft applies to.
      * @param miltyTemplate A map template made for Milty drafting.
      * @return The Nucleus map template model.
      */
-    public static MapTemplateModel convertMiltyToNucleus(Game game, MapTemplateModel miltyTemplate, NucleusDistanceTool distanceTool) {
+    public static MapTemplateModel convertMiltyToNucleus(MapTemplateModel miltyTemplate, NucleusDistanceTool distanceTool) {
+
+        // Setup basics
+        MapTemplateModel nucleusTemplate = new MapTemplateModel();
+        nucleusTemplate.setAlias(miltyTemplate.getAlias() + "-Nucleus");
+        nucleusTemplate.setAuthor(miltyTemplate.getAuthor() + " (converted for Nucleus)");
+        nucleusTemplate.setDescr(miltyTemplate.getDescr());
+        nucleusTemplate.setPlayerCount(miltyTemplate.getPlayerCount());
+        nucleusTemplate.setToroidal(miltyTemplate.isToroidal());
+
         // For each tile that's part of a player's slice, if it's not directly touching their home system:
         // - Unset the player/slice parameters
         // - Set the nucleus parameter to true
+        List<MapTemplateTile> nucleusTiles = new ArrayList<>();
         Map<Integer, MapTemplateTile> playerNumberToHomeSystem = miltyTemplate.getTemplateTiles().stream()
             .filter(t -> t.getHome() != null && t.getHome() && t.getPlayerNumber() != null)
             .collect(Collectors.toMap(MapTemplateTile::getPlayerNumber, t -> t));
         for (MapTemplateTile templateTile : miltyTemplate.getTemplateTiles()) {
+            MapTemplateTile nucleusTile = new MapTemplateTile();
+            nucleusTile.setCustodians(templateTile.getCustodians());
+            nucleusTile.setHome(templateTile.getHome());
+            nucleusTile.setMiltyTileIndex(templateTile.getMiltyTileIndex());
+            nucleusTile.setPlayerNumber(templateTile.getPlayerNumber());
+            nucleusTile.setPos(templateTile.getPos());
+            nucleusTile.setStaticTileId(templateTile.getStaticTileId());
+            nucleusTile.setTokens(templateTile.getTokens());
+            nucleusTiles.add(nucleusTile);
+
             // Skip non-player tiles
-            if (templateTile.getPlayerNumber() == null || templateTile.getStaticTileId() != null) continue;
+            if (nucleusTile.getPlayerNumber() == null || nucleusTile.getStaticTileId() != null) continue;
             // Skip home systems
-            if (templateTile.getHome() != null && templateTile.getHome()) continue;
+            if (nucleusTile.getHome() != null && nucleusTile.getHome()) continue;
 
             // Check if the tile is one move away from the home system for the player
-            MapTemplateTile homeTile = playerNumberToHomeSystem.get(templateTile.getPlayerNumber());
+            MapTemplateTile homeTile = playerNumberToHomeSystem.get(nucleusTile.getPlayerNumber());
             if (homeTile == null) {
-                BotLogger.warning(new LogMessageOrigin(game), "Nucleus draft: missing home system for player " + templateTile.getPlayerNumber());
-                continue; // no home system for this player
+                continue; // no home system for this player?
             }
 
-            Integer homeDistance = distanceTool.getNattyDistance(templateTile.getPos(), homeTile.getPos());
+            Integer homeDistance = distanceTool.getNattyDistance(nucleusTile.getPos(), homeTile.getPos());
             if (homeDistance != null && homeDistance > 1) {
                 // Convert to a nucleus tile
-                templateTile.setPlayerNumber(null);
-                templateTile.setMiltyTileIndex(null);
-                templateTile.setNucleus(true);
+                nucleusTile.setPlayerNumber(null);
+                nucleusTile.setMiltyTileIndex(null);
+                nucleusTile.setNucleus(true);
             }
         }
+        nucleusTemplate.setTemplateTiles(nucleusTiles);
 
         // Fix tiles per player
-        int oldBluePerPlayer = miltyTemplate.getBluePerPlayer();
+        int oldBluePerPlayer = miltyTemplate.bluePerPlayer();
         int oldTilesPerPlayer = miltyTemplate.tilesPerPlayer();
-        int newTilesPerPlayer = miltyTemplate.getTemplateTiles().stream()
+        int newTilesPerPlayer = nucleusTemplate.getTemplateTiles().stream()
             .filter(t -> t.getPlayerNumber() != null && t.getPlayerNumber() == 1 && t.getMiltyTileIndex() != null)
             .mapToInt(t -> 1)
             .sum();
         float oldBluePerPlayerRatio = (float) oldBluePerPlayer / oldTilesPerPlayer;
         int newBluePerPlayer = (int) Math.ceil(newTilesPerPlayer * oldBluePerPlayerRatio);
-        // Remember to exclude the home system tile from the count
-        int newRedPerPlayer = (newTilesPerPlayer - 1) - newBluePerPlayer;
-        miltyTemplate.setBluePerPlayer(newBluePerPlayer);
-        miltyTemplate.setRedPerPlayer(newRedPerPlayer);
-        miltyTemplate.setTilesPerPlayer(newTilesPerPlayer);
+        int newRedPerPlayer = newTilesPerPlayer - newBluePerPlayer;
+        nucleusTemplate.setBluePerPlayer(newBluePerPlayer);
+        nucleusTemplate.setRedPerPlayer(newRedPerPlayer);
+        nucleusTemplate.setTilesPerPlayer(newTilesPerPlayer);
 
         // Fix emulated tiles
-        List<String> emulatedTiles = miltyTemplate.getSliceEmulateTiles();
+        List<String> emulatedTiles = miltyTemplate.emulatedTiles();
         String emulatedHomeSystem = emulatedTiles.stream()
             .filter(p -> miltyTemplate.getTemplateTiles().stream()
                 .anyMatch(t -> t.getPos().equals(p) && t.getHome() != null && t.getHome()))
@@ -90,9 +109,9 @@ public class NucleusDraftHelper {
                 newEmulatedTiles.add(tilePos);
             }
         }
-        miltyTemplate.setSliceEmulateTiles(newEmulatedTiles);
+        nucleusTemplate.setSliceEmulateTiles(newEmulatedTiles);
 
-        return miltyTemplate;
+        return nucleusTemplate;
     }
 
     public static void createNucleus(Game game, MiltyDraftManager draftManager, MapTemplateModel nucleusTemplate, NucleusDistanceTool distanceTool) {
@@ -133,9 +152,9 @@ public class NucleusDraftHelper {
         //     - Check their distances, getting the minimum distance between tiles
         //     - Repeat 50 times, and ultimately use the collection with the highest min distance
         // - Remove wormholes from the draft pool
-        List<MapTemplateTile> nucleusTiles = nucleusTemplate.getTemplateTiles().stream()
+        List<MapTemplateTile> nucleusTiles = new ArrayList<>(nucleusTemplate.getTemplateTiles().stream()
             .filter(t -> t.getNucleus() != null && t.getNucleus())
-            .collect(Collectors.toList());
+            .collect(Collectors.toList()));
         int redBackedWormholes = 0;
         for (String wormholeType : wormholesPerType.keySet()) {
             List<MiltyDraftTile> wormholesToPlace = selectedWormholes.get(wormholeType);
@@ -143,7 +162,8 @@ public class NucleusDraftHelper {
             int numberToPlace = wormholesToPlace.size();
             List<MapTemplateTile> bestTileChoices = new ArrayList<>();
             Integer bestTileChoicesMinDistance = null;
-            for (int attempt = 0; attempt < 50; ++attempt) {
+            for (int attempt = 0; attempt < 20; ++attempt) {
+                Collections.shuffle(nucleusTiles);
                 List<MapTemplateTile> chosenTiles = new ArrayList<>(nucleusTiles.subList(0, numberToPlace));
                 Integer chosenTilesMinDistance = null;
                 for (int i = 0; i < numberToPlace; i++) {
@@ -170,12 +190,16 @@ public class NucleusDraftHelper {
                     if (bestTileChoices.isEmpty()) break; //no more tiles to place
                     game.setTile(new Tile(wormholeTile.getTile().getTileID(), bestTileChoices.get(0).getPos()));
                     bestTileChoices.remove(0);
-                    if (wormholeTile.getTierList() == TierList.red) {
+                    if (wormholeTile.getTile().getTileModel().getTileBack() == TileBack.RED) {
                         redBackedWormholes++;
                     }
                 }
             }
         }
+
+        // Remove placed wormholes from the draft pool
+        removeNucleusTilesFromDraft(game, draftManager);
+
         // - Determine how many red and blue tiles are still needed after wormhole placement
         int nucleusTileCount = nucleusTemplate.getTemplateTiles().stream()
             .filter(t -> t.getNucleus() != null && t.getNucleus())
@@ -190,16 +214,16 @@ public class NucleusDraftHelper {
         int intendedRedTileCount = redTileCounts.get(0);
         int actualRedTileCount = Math.max(intendedRedTileCount, redBackedWormholes);
         int actualBlueTileCount = nucleusTileCount - actualRedTileCount;
-        int redTilesPlaced = nucleusTemplate.getTemplateTiles().stream()
+        int redTilesPlaced = (int) nucleusTemplate.getTemplateTiles().stream()
             .filter(t -> t.getNucleus() != null && t.getNucleus())
             .map(t -> game.getTileByPosition(t.getPos()))
             .filter(t -> t != null && t.getTileModel().getTileBack() == TileBack.RED)
-            .mapToInt(t -> 1).sum();
-        int blueTilesPlaced = nucleusTemplate.getTemplateTiles().stream()
+            .count();
+        int blueTilesPlaced = (int) nucleusTemplate.getTemplateTiles().stream()
             .filter(t -> t.getNucleus() != null && t.getNucleus())
             .map(t -> game.getTileByPosition(t.getPos()))
             .filter(t -> t != null && t.getTileModel().getTileBack() == TileBack.BLUE)
-            .mapToInt(t -> 1).sum();
+            .count();
         int redTilesNeeded = actualRedTileCount - redTilesPlaced;
         int blueTilesNeeded = actualBlueTileCount - blueTilesPlaced;
 
@@ -251,7 +275,8 @@ public class NucleusDraftHelper {
         //   - Place blue tiles anywhere (no attempt to balance resources)
         for (MiltyDraftTile blueTile : blueTilesToPlace) {
             List<String> availablePositions = nucleusTemplate.getTemplateTiles().stream()
-                .filter(t -> t.getNucleus() == true && game.getTileByPosition(t.getPos()) == null)
+                .filter(t -> t.getNucleus() != null && t.getNucleus())
+                .filter(t -> game.getTileByPosition(t.getPos()) == null || TileHelper.isDraftTile(game.getTileByPosition(t.getPos()).getTileModel()))
                 .map(MapTemplateTile::getPos)
                 .collect(Collectors.toList());
             if (availablePositions.isEmpty()) {
@@ -291,6 +316,8 @@ public class NucleusDraftHelper {
         int suggestedMax = nucleusTemplate.getPlayerCount() - 2;
         int actualMin = Math.max(suggestedMin, absoluteMinWormholes);
         int actualMax = Math.min(suggestedMax, maxRedWormholes + maxBlueWormholes);
+
+        if (actualMax < actualMin) return 0;
 
         // get array of possible numbers, min to max inclusive:
         List<Integer> possibleAmounts = IntStream.rangeClosed(actualMin, actualMax)
@@ -343,9 +370,9 @@ public class NucleusDraftHelper {
     }
 
     private static List<MiltyDraftTile> getWormholeTiles(List<MiltyDraftTile> draftTiles) {
-        return draftTiles.stream()
+        return new ArrayList<>(draftTiles.stream()
             .filter(t -> t.getTile().getWormholes().stream().map(w -> w.toString()).anyMatch(wormholeTypes::contains))
-            .toList();
+            .toList());
     }
 
     private static String getBestRedTilePosition(Game game, MapTemplateModel nucleusTemplate, NucleusDistanceTool distanceTool, boolean isAnomaly) {
@@ -359,7 +386,8 @@ public class NucleusDraftHelper {
             .collect(Collectors.toList());
 
         List<String> availablePositions = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getNucleus() != null && t.getNucleus() && game.getTileByPosition(t.getPos()) == null)
+            .filter(t -> t.getNucleus() != null && t.getNucleus())
+            .filter(t -> game.getTileByPosition(t.getPos()) == null || TileHelper.isDraftTile(game.getTileByPosition(t.getPos()).getTileModel()))
             .map(MapTemplateTile::getPos)
             .collect(Collectors.toList());
         if (availablePositions.isEmpty()) {
@@ -408,11 +436,6 @@ public class NucleusDraftHelper {
     }
 
     public static void removeNucleusTilesFromDraft(Game game, MiltyDraftManager draftManager) {
-        //Really just remove all map tiles
-        game.getTileMap().values().forEach(tile -> {
-            draftManager.getAll().removeIf(t -> t.getTile().getTileID().equals(tile.getTileID()));
-            draftManager.getBlue().removeIf(t -> t.getTile().getTileID().equals(tile.getTileID()));
-            draftManager.getRed().removeIf(t -> t.getTile().getTileID().equals(tile.getTileID()));
-        });
+        game.getTileMap().values().stream().map(t -> t.getTileID()).forEach(draftManager::removeTileFromDraftPool);
     }
 }

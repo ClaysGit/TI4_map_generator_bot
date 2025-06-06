@@ -163,6 +163,7 @@ public class DraftDisplayService {
         boolean removeSliceMsgs = false;
         boolean removeFactionMsgs = false;
         boolean removePositionMsgs = false;
+        boolean removeSeatMsgs = false;
         for (Message msg : hist.getRetrievedHistory()) {
             String msgTxt = msg.getContentRaw();
             if (msgTxt.contains("is up to draft")) {
@@ -185,6 +186,10 @@ public class DraftDisplayService {
             if (clearOldDraftInfo && msgTxt.equals(POSITION)) {
                 if (removePositionMsgs) msg.delete().queue();
                 removePositionMsgs = true;
+            }
+            if (clearOldDraftInfo && msgTxt.equals(SEATS)) {
+                if (removeSeatMsgs) msg.delete().queue();
+                removeSeatMsgs = true;
             }
             if (clearOldDraftInfo && messageIsSliceImg(msg)) {
                 if (removeImages) msg.delete().queue();

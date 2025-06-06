@@ -42,6 +42,7 @@ import ti4.model.FactionModel;
 import ti4.model.MapTemplateModel;
 import ti4.model.Source;
 import ti4.model.TechnologyModel;
+import ti4.model.MapTemplateModel.MapTemplateTile;
 import ti4.service.PlanetService;
 import ti4.service.emoji.MiscEmojis;
 import ti4.service.info.AbilityInfoService;
@@ -151,14 +152,14 @@ public class MiltyService {
         initDraftOrder(draftManager, players, staticOrder);
 
         if (specs.getDraftSeats()) {
-            // Use the same letters/emoji as slices, but from the end of the alphabet
-            List<String> seats = new ArrayList<>();
-            int seatCount = specs.template.getPlayerCount();
-            for (int i = 0; i < seatCount; i++) {
-                String seat = ('Z' - ((seatCount - 1) - i)) + "";
-                seats.add(seat);
+            Set<Integer> seats = new HashSet<>();
+            // Seat color depends on actual "player number" in the template file, so use those
+            for (MapTemplateTile tile : specs.template.getTemplateTiles()) {
+                if (tile.getPlayerNumber() != null) {
+                    seats.add(tile.getPlayerNumber());
+                }
             }
-            draftManager.setSeats(seats);
+            draftManager.setSeats(new ArrayList<>(seats));
         } else {
             draftManager.setSeats(new ArrayList<>());
         }
@@ -177,17 +178,35 @@ public class MiltyService {
             return "Could not start drafting. Nucleus drafting does not yet support preset slices.";
         }
 
+        String startMsg = "## Generating the milty draft!!";
+        startMsg += "\n - Also clearing out any tiles that may have already been on the map so that the draft will fill in tiles properly.";
+        game.clearTileMap();
+
         if (specs.getGenerateNucleus()) {
             NucleusDistanceTool distanceTool = new NucleusDistanceTool(game, specs.template);
-            //TODO: Support natty nucleus templates. For now, we're just converting milty templates.
-            MapTemplateModel nucleusTemplate = NucleusDraftHelper.convertMiltyToNucleus(game, specs.template, distanceTool);
-            NucleusDraftHelper.createNucleus(game, draftManager, nucleusTemplate, distanceTool);
+            //TODO: Support actual nucleus templates. For now, we're just converting milty templates.
+            try {
+                // In order for the FoW Helper to produce adjacent positions, it must be able to look up tiles and hyperlane data
+                // in the game object. So we build the partial map with the milty template, even though it will place player draft tiles
+                // that will need to be removed.
+                // A null event prevents any map update; this should get superceded by a map update after the nucleus is built.
+                MiltyDraftHelper.buildPartialMap(game, null);
+
+                MapTemplateModel nucleusTemplate = NucleusDraftHelper.convertMiltyToNucleus(specs.template, distanceTool);
+                specs.setTemplate(nucleusTemplate); //Used directly to generate slices
+
+                NucleusDraftHelper.createNucleus(game, draftManager, nucleusTemplate, distanceTool);
+            } catch (Exception e) {
+                //Ignore
+            }
         }
 
         // validate slice count + sources
         int redTiles = draftManager.getRed().size();
         int blueTiles = draftManager.getBlue().size();
-        int maxSlices = Math.min(redTiles / 2, blueTiles / 3);
+        int redNeeded = specs.template.redPerPlayer();
+        int blueNeeded = specs.template.bluePerPlayer();
+        int maxSlices = Math.min(redTiles / redNeeded, blueTiles / blueNeeded);
         if (specs.numSlices > maxSlices) {
             String msg = "Milty draft in this bot does not support " + specs.numSlices + " slices. You can enable DS to allow building additional slices";
             msg += "\n> The options you have selected enable a maximum of `" + maxSlices + "` slices. [" + blueTiles + "blue/" + redTiles + "red]";
@@ -195,15 +214,16 @@ public class MiltyService {
             return "Could not start milty draft, fix the error and try again";
         }
 
-        String startMsg = "## Generating the milty draft!!";
-        startMsg += "\n - Also clearing out any tiles that may have already been on the map so that the draft will fill in tiles properly.";
         if (specs.numSlices == maxSlices) {
             startMsg += "\n - *You asked for the max number of slices, so this may take several seconds*";
         }
 
-        game.clearTileMap();
         try {
             MiltyDraftHelper.buildPartialMap(game, event);
+            if (specs.getGenerateNucleus()) {
+                // Manually trigger the map, since the nucleus process will result in no detected changes in the above partial build.
+                ButtonHelper.updateMap(game, event);
+            }
         } catch (Exception e) {
             // Ignore
         }

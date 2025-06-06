@@ -98,16 +98,23 @@ public class MapTemplateHelper {
         return null;
     }
 
-    private static Tile getTileFromTemplateTile(MapTemplateTile tile) {
+    public static String getDraftColorForPlayerNumber(Integer playerNumber) {
         List<String> backupColors = Arrays.asList("red", "blue", "yellow", "emerald", "lavender", "petrol", "chocolate",
             "ethereal", "forest", "gold", "green", "grey", "navy", "spring", "teal", "black", "lightgrey", "rainbow",
             "turquoise", "lightbrown", "orange", "pink", "sunset", "bloodred", "brown", "chrome", "purple", "rose", "white", "tan");
 
+        if (playerNumber == null || playerNumber < 1 || playerNumber > backupColors.size()) {
+            return null; // invalid player number
+        }
+        return backupColors.get(playerNumber - 1);
+    }
+
+    private static Tile getTileFromTemplateTile(MapTemplateTile tile) {
         String tileID = null;
         if (tile.getStaticTileId() != null)
             tileID = tile.getStaticTileId();
         else if (tile.getPlayerNumber() != null) {
-            String color = backupColors.get(tile.getPlayerNumber());
+            String color = getDraftColorForPlayerNumber(tile.getPlayerNumber());
             if (tile.getMiltyTileIndex() != null) {
                 tileID = color + (tile.getMiltyTileIndex() + 1);
             } else if (tile.getHome() != null) {
@@ -140,7 +147,7 @@ public class MapTemplateHelper {
         // fill in draft tiles for all players
         for (Player p : players) {
             PlayerDraft draft = manager.getPlayerDraft(p);
-            Integer playerNum = draft.getPosition();
+            Integer playerNum = manager.getSeats().isEmpty() ? draft.getPosition() : draft.getSeat();
             String faction = draft.getFaction();
             MiltyDraftSlice slice = draft.getSlice();
             for (MapTemplateTile tile : template.getTemplateTiles()) {

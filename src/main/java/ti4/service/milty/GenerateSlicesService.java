@@ -115,7 +115,7 @@ public class GenerateSlicesService {
 
         long elapsed = System.nanoTime() - startTime;
         boolean debug = GlobalSettings.getSetting(GlobalSettings.ImplementedSettings.DEBUG.toString(), Boolean.class, false);
-        if (!slicesCreated || elapsed >= 10000000000L || debug) {
+        if (event != null && (!slicesCreated || elapsed >= 10000000000L || debug)) {
             StringBuilder sb = new StringBuilder();
             sb.append("Milty draft took a while... jazz, take a look:\n");
             sb.append("`        Elapsed time:` ").append(DateTimeHelper.getTimeRepresentationNanoSeconds(elapsed)).append("\n");
@@ -130,40 +130,40 @@ public class GenerateSlicesService {
     }
 
     private static MiltyDraftSlice assembleOneSlice(List<List<Boolean>> adjMatrix, List<List<MiltyDraftTile>> partition, int sliceNum, String sliceName, boolean anomaliesCanTouch) {
-        List<MiltyDraftTile> tiles = new ArrayList<>();
+        List<MiltyDraftTile> sliceTiles = new ArrayList<>();
         for (List<MiltyDraftTile> tier : partition)
-            tiles.add(tier.get(sliceNum));
-        Collections.shuffle(tiles);
+            sliceTiles.add(tier.get(sliceNum));
+        Collections.shuffle(sliceTiles);
 
-        List<Integer> ints = new ArrayList<>();
-        for (int k = 0; k < tiles.size(); k++)
-            if (tiles.get(k).getTierList() == TierList.anomaly)
-                ints.add(k + 1);
-        if (!anomaliesCanTouch && ints.size() == 2) { // just skip this if there's more than 2 anomalies tbh
+        List<Integer> anomalyInts = new ArrayList<>();
+        for (int k = 0; k < sliceTiles.size(); k++)
+            if (sliceTiles.get(k).getTierList() == TierList.anomaly)
+                anomalyInts.add(k + 1);
+        if (!anomaliesCanTouch && anomalyInts.size() == 2) { // just skip this if there's more than 2 anomalies tbh
             int turns = -4;
             boolean tryagain = true;
-            while (tryagain && turns < tiles.size()) {
+            while (tryagain && turns < sliceTiles.size()) {
                 tryagain = false;
-                for (int x : ints)
-                    for (int y : ints)
+                for (int x : anomalyInts)
+                    for (int y : anomalyInts)
                         if (x != y && adjMatrix.get(x).get(y)) {
                             tryagain = true;
                             break;
                         }
                 if (tryagain) {
-                    Collections.rotate(tiles, 1);
-                    if (turns == 0) Collections.shuffle(tiles);
-                    ints.clear();
-                    for (int k = 0; k < tiles.size(); k++)
-                        if (tiles.get(k).getTierList() == TierList.anomaly)
-                            ints.add(k + 1);
+                    Collections.rotate(sliceTiles, 1);
+                    if (turns == 0) Collections.shuffle(sliceTiles);
+                    anomalyInts.clear();
+                    for (int k = 0; k < sliceTiles.size(); k++)
+                        if (sliceTiles.get(k).getTierList() == TierList.anomaly)
+                            anomalyInts.add(k + 1);
                 }
                 turns++;
             }
         }
         MiltyDraftSlice slice = new MiltyDraftSlice();
         slice.setName(sliceName);
-        slice.setTiles(tiles);
+        slice.setTiles(sliceTiles);
         return slice;
     }
 

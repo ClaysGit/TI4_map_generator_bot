@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.function.Consumers;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -23,6 +24,7 @@ import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import ti4.buttons.Buttons;
 import ti4.helpers.AliasHandler;
 import ti4.helpers.Helper;
+import ti4.helpers.MapTemplateHelper;
 import ti4.helpers.StringHelper;
 import ti4.image.Mapper;
 import ti4.image.TileHelper;
@@ -33,6 +35,7 @@ import ti4.message.MessageHelper;
 import ti4.model.FactionModel;
 import ti4.model.Source.ComponentSource;
 import ti4.model.TileModel;
+import ti4.service.emoji.ColorEmojis;
 import ti4.service.emoji.FactionEmojis;
 import ti4.service.emoji.MiltyDraftEmojis;
 import ti4.service.emoji.TI4Emoji;
@@ -51,7 +54,7 @@ public class MiltyDraftManager {
     private List<String> draftOrder = new ArrayList<>(); // userID
     private List<String> players = new ArrayList<>(); // userID
     private List<String> factionDraft = new ArrayList<>();
-    private List<String> seats = new ArrayList<>(); //empty if unused
+    private List<Integer> seats = new ArrayList<>(); //empty if unused
 
     private String mapTemplate;
 
@@ -69,7 +72,7 @@ public class MiltyDraftManager {
 
         //Conditional seat draft info
         private Boolean draftingSeats = false;
-        private String seat;
+        private Integer seat;
 
         public String summary(String doggy) {
             if (draftingSeats) {
@@ -94,8 +97,9 @@ public class MiltyDraftManager {
         }
 
         private String seatEmoji() {
-            if (seat == null || !draftingSeats) return "";
-            return MiltyDraftEmojis.getMiltyDraftEmoji(seat).toString();
+            if (!draftingSeats) return "";
+            String color = seat == null ? "sherbet" : MapTemplateHelper.getDraftColorForPlayerNumber(seat);
+            return ColorEmojis.getColorEmoji(color).toString();
         }
 
         @JsonIgnore
@@ -104,7 +108,7 @@ public class MiltyDraftManager {
             String sliceStr = slice == null ? "null" : slice.getName();
             String orderStr = position == null ? "null" : Integer.toString(position);
             if (draftingSeats) {
-                String seatStr = seat == null ? "null" : seat;
+                String seatStr = seat == null ? "null" : Integer.toString(seat);
                 return String.join(",", factionStr, sliceStr, orderStr, seatStr);
             }
             return String.join(",", factionStr, sliceStr, orderStr);
@@ -174,6 +178,12 @@ public class MiltyDraftManager {
         return new ArrayList<>(red);
     }
 
+    public void removeTileFromDraftPool(String tileId) {
+        all.removeIf(t -> t.getTile().getTileID().equals(tileId));
+        blue.removeIf(t -> t.getTile().getTileID().equals(tileId));
+        red.removeIf(t -> t.getTile().getTileID().equals(tileId));
+    }
+
     public void addSlice(MiltyDraftSlice slice) {
         slices.add(slice);
     }
@@ -183,9 +193,17 @@ public class MiltyDraftManager {
 
         for (String player : draftOrder) {
             if (!draft.containsKey(player)) {
-                draft.put(player, new PlayerDraft());
+                PlayerDraft playerDraft = new PlayerDraft();
+                if (!seats.isEmpty()) playerDraft.setDraftingSeats(true);
+                draft.put(player, playerDraft);
             }
         }
+    }
+
+    public void setSeats(List<Integer> seats) {
+        this.seats.clear();
+        this.seats.addAll(seats);
+        draft.values().forEach(pd -> pd.setDraftingSeats(!seats.isEmpty()));
     }
 
     public void setSeatsDraft(List<String> seats) {
@@ -230,7 +248,7 @@ public class MiltyDraftManager {
                     remaining.add(StringHelper.ordinal(i) + " pick");
         }
         if (!seats.isEmpty() && active.getSeat() == null) {
-            for (String seat : seats) {
+            for (Integer seat : seats) {
                 if (!isSeatTaken(seat)) {
                     remaining.add("Seat " + seat);
                 }
@@ -340,8 +358,8 @@ public class MiltyDraftManager {
     }
 
     @JsonIgnore
-    public boolean isSeatTaken(String seat) {
-        if (seats.isEmpty() || seat == null || seat.isBlank()) return false;
+    public boolean isSeatTaken(Integer seat) {
+        if (seats.isEmpty() || seat == null) return false;
         for (PlayerDraft pd : draft.values()) {
             if (pd.getSeat() != null && pd.getSeat().equals(seat)) {
                 return true;
@@ -508,10 +526,11 @@ public class MiltyDraftManager {
         return null;
     }
 
-    private String draftSeat(String player, String seat) {
+    private String draftSeat(String player, String seatString) {
         PlayerDraft current = getPlayerDraft(player);
         if (seats.isEmpty()) return "You cannot draft a seat in this draft. Try again.";
         if (current.getSeat() != null) return "You have already picked a seat. Try again.";
+        Integer seat = Integer.parseInt(seatString);
         if (isSeatTaken(seat)) return "Seat " + seat + " has already been drafted. Try again.";
         if (!seats.contains(seat)) return "This seat (" + seat + ") doesn't seem to exist. Try again.";
 
@@ -555,9 +574,10 @@ public class MiltyDraftManager {
     public List<Button> getSeatButtons() {
         List<Button> seatButtons = new ArrayList<>();
         if (seats.isEmpty()) return seatButtons;
-        for (String seat : seats) {
+        for (Integer seat : seats) {
             if (isSeatTaken(seat)) continue;
-            seatButtons.add(Buttons.green("milty_seat_" + seat, " ", MiltyDraftEmojis.getMiltyDraftEmoji(seat)));
+            String color = MapTemplateHelper.getDraftColorForPlayerNumber(seat);
+            seatButtons.add(Buttons.gray("milty_seat_" + seat, StringUtils.capitalize(color), ColorEmojis.getColorEmoji(color)));
         }
         return seatButtons;
     }
@@ -593,7 +613,7 @@ public class MiltyDraftManager {
         try {
             String sliceStr = String.join(";", slices.stream().map(MiltyDraftSlice::ttsString).toList());
             String factionStr = String.join(",", factionDraft);
-            String seatStr = "seats:" + String.join(",", seats);
+            String seatStr = "seats:" + String.join(",", seats.stream().map(s -> Integer.toString(s)).toList());
             String playerStr = String.join(",", players);
             String picksStr = String.join(";", players.stream().map(p -> getPlayerDraft(p).save()).toList());
             String templateStr = getMapTemplate();
@@ -659,6 +679,8 @@ public class MiltyDraftManager {
             if (draftSlice(player, currentPicks.nextToken()) == null)
                 setNextPlayerInDraft();
             if (draftSpeakerOrder(player, currentPicks.nextToken()) == null)
+                setNextPlayerInDraft();
+            if (currentPicks.hasMoreTokens() && draftSpeakerOrder(player, currentPicks.nextToken()) == null)
                 setNextPlayerInDraft();
             index++;
         }
