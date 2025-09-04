@@ -51,6 +51,7 @@ import ti4.service.info.LeaderInfoService;
 import ti4.service.info.SecretObjectiveInfoService;
 import ti4.service.info.TechInfoService;
 import ti4.service.info.UnitInfoService;
+import ti4.service.milty.utilities.NucleusMapTemplateProvider;
 import ti4.service.planet.AddPlanetService;
 import ti4.service.tech.ListTechService;
 
@@ -183,19 +184,27 @@ public class MiltyService {
         game.clearTileMap();
 
         if (specs.getGenerateNucleus()) {
-            NucleusDistanceTool distanceTool = new NucleusDistanceTool(game, specs.template);
-            //TODO: Support actual nucleus templates. For now, we're just converting milty templates.
+            // TODO: Bake this into the settings manager
+            MapTemplateModel nucleusTemplate = NucleusMapTemplateProvider.getNucleusMapTemplateForPlayerCount(game.getPlayerCountForMap());
+            if (nucleusTemplate == null) {
+                return "Could not start milty draft, nucleus map template not found for player count: " + game.getPlayerCountForMap();
+            }
+            game.setMapTemplateID(nucleusTemplate.getID());
+            specs.setTemplate(nucleusTemplate);
             try {
                 // In order for the FoW Helper to produce adjacent positions, it must be able to look up tiles and hyperlane data
                 // in the game object. So we build the partial map with the milty template, even though it will place player draft tiles
                 // that will need to be removed.
                 // A null event prevents any map update; this should get superceded by a map update after the nucleus is built.
                 MiltyDraftHelper.buildPartialMap(game, null);
+                NucleusDistanceTool distanceTool = new NucleusDistanceTool(game);
 
-                MapTemplateModel nucleusTemplate = NucleusDraftHelper.convertMiltyToNucleus(specs.template, distanceTool);
-                specs.setTemplate(nucleusTemplate); //Used directly to generate slices
+                //NucleusDraftHelper.createNucleus(game, draftManager, nucleusTemplate, distanceTool);
 
-                NucleusDraftHelper.createNucleus(game, draftManager, nucleusTemplate, distanceTool);
+                // NucleusGenerationService: Start nucleus build
+                // - select build parameters
+                // - distribute required tiles (wormholes, legendaries)
+
             } catch (Exception e) {
                 //Ignore
             }
@@ -220,12 +229,12 @@ public class MiltyService {
 
         try {
             MiltyDraftHelper.buildPartialMap(game, event);
-            if (specs.getGenerateNucleus()) {
-                // Manually trigger the map, since the nucleus process will result in no detected changes in the above partial build.
-                ButtonHelper.updateMap(game, event);
-            }
         } catch (Exception e) {
             // Ignore
+        }
+        if (specs.getGenerateNucleus()) {
+            // Manually trigger the map, since the nucleus process will result in no detected changes in the above partial build.
+            ButtonHelper.updateMap(game, event);
         }
 
         if (specs.presetSlices != null) {
@@ -242,6 +251,14 @@ public class MiltyService {
                     }
                     MessageHelper.sendMessageToChannel(event.getMessageChannel(), msg);
                 } else {
+
+                    // After initial nucleus setup and slice generation:
+                    // Finalize Nucleus
+                    // - Finish unplaced tiles
+                    // - Trait balancing
+                    // - Value balancing
+                    // - Validation
+
                     DraftDisplayService.repostDraftInformation(event, draftManager, game);
                     game.setPhaseOfGame("miltydraft");
                     GameManager.save(game, "Milty");

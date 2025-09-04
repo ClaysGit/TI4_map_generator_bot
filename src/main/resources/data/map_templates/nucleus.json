@@ -1,0 +1,84 @@
+[
+  {
+    "alias": "6pStandardNucleus",
+    "playerCount": 6,
+    "templateTiles": [
+      { "pos": "000", "staticTileId": "18", "custodians": true },
+
+      {
+        "pos": "101",
+        "nucleusSlices": [1]
+      },
+      {
+        "pos": "102",
+        "nucleusSlices": [2]
+      },
+      {
+        "pos": "103",
+        "nucleusSlices": [3]
+      },
+      {
+        "pos": "104",
+        "nucleusSlices": [4]
+      },
+      {
+        "pos": "105",
+        "nucleusSlices": [5]
+      },
+      {
+        "pos": "106",
+        "nucleusSlices": [6]
+      },
+
+      { "pos": "201", "playerNumber": 1, "miltyTileIndex": 1 },
+      {
+        "pos": "202",
+        "nucleusSlices": [1, 2]
+      },
+      { "pos": "203", "playerNumber": 2, "miltyTileIndex": 1 },
+      {
+        "pos": "204",
+        "nucleusSlices": [2, 3]
+      },
+      { "pos": "205", "playerNumber": 3, "miltyTileIndex": 1 },
+      {
+        "pos": "206",
+        "nucleusSlices": [3, 4]
+      },
+      { "pos": "207", "playerNumber": 4, "miltyTileIndex": 1 },
+      {
+        "pos": "208",
+        "nucleusSlices": [4, 5]
+      },
+      { "pos": "209", "playerNumber": 5, "miltyTileIndex": 1 },
+      {
+        "pos": "210",
+        "nucleusSlices": [5, 6]
+      },
+      { "pos": "211", "playerNumber": 6, "miltyTileIndex": 1 },
+      {
+        "pos": "212",
+        "nucleusSlices": [6, 1]
+      },
+
+      { "pos": "301", "playerNumber": 1, "home": true },
+      { "pos": "302", "playerNumber": 1, "miltyTileIndex": 0 },
+      { "pos": "303", "playerNumber": 2, "miltyTileIndex": 2 },
+      { "pos": "304", "playerNumber": 2, "home": true },
+      { "pos": "305", "playerNumber": 2, "miltyTileIndex": 0 },
+      { "pos": "306", "playerNumber": 3, "miltyTileIndex": 2 },
+      { "pos": "307", "playerNumber": 3, "home": true },
+      { "pos": "308", "playerNumber": 3, "miltyTileIndex": 0 },
+      { "pos": "309", "playerNumber": 4, "miltyTileIndex": 2 },
+      { "pos": "310", "playerNumber": 4, "home": true },
+      { "pos": "311", "playerNumber": 4, "miltyTileIndex": 0 },
+      { "pos": "312", "playerNumber": 5, "miltyTileIndex": 2 },
+      { "pos": "313", "playerNumber": 5, "home": true },
+      { "pos": "314", "playerNumber": 5, "miltyTileIndex": 0 },
+      { "pos": "315", "playerNumber": 6, "miltyTileIndex": 2 },
+      { "pos": "316", "playerNumber": 6, "home": true },
+      { "pos": "317", "playerNumber": 6, "miltyTileIndex": 0 },
+      { "pos": "318", "playerNumber": 1, "miltyTileIndex": 2 }
+    ]
+  }
+]

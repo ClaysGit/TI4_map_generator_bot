@@ -112,7 +112,10 @@ public class GameSettings extends SettingsMenu {
         ls.add(secrets);
         ls.add(tigl);
         ls.add(alliance);
-        ls.add(mapTemplate);
+        // TODO: Add support for non-default templates
+        // Currently, this setting is overriden by the Nucleus setup to be whatever the default is for this player count
+        if (!(parent instanceof MiltySettings ms && ms.getDraftMode().getChosenKey().equals("nucleus")))
+            ls.add(mapTemplate);
         return ls;
     }
 

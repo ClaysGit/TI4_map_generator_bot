@@ -9,11 +9,10 @@ import java.util.Map;
 import java.util.Set;
 
 import ti4.helpers.FoWHelper;
+import ti4.image.Mapper;
 import ti4.image.TileHelper;
 import ti4.map.Game;
 import ti4.model.MapTemplateModel;
-import ti4.model.MapTemplateModel.MapTemplateTile;
-import ti4.model.TileModel;
 
 /**
  * This will calculate the distance between two positions. It respects hyperlanes, but NOT wormholes.
@@ -23,15 +22,20 @@ import ti4.model.TileModel;
 public class NucleusDistanceTool {
     private final Game game;
     private final Map<String, Map<String, Integer>> distanceCache = new HashMap<>();
-    private final Map<String, MapTemplateTile> positionToDraftTile;
+    private final Set<String> legalPositions;
     private final int MAX_DISTANCE = 10;
 
-    public NucleusDistanceTool(Game game, MapTemplateModel nucleusTemplate) {
+    public NucleusDistanceTool(Game game) {
         this.game = game;
 
-        positionToDraftTile = nucleusTemplate.getTemplateTiles().stream()
-            .filter(t -> t.getPos() != null)
-            .collect(HashMap::new, (m, t) -> m.put(t.getPos(), t), HashMap::putAll);
+        MapTemplateModel mapTemplate = Mapper.getMapTemplate(game.getMapTemplateID());
+        if (mapTemplate == null) {
+            throw new IllegalArgumentException("Map template not found for ID: " + game.getMapTemplateID());
+        }
+        legalPositions = mapTemplate.getTemplateTiles().stream()
+            .filter(t -> t.getStaticTileId() == null || !TileHelper.getTileById(t.getStaticTileId()).isHyperlane())
+            .map(t -> t.getPos())
+            .collect(HashSet::new, HashSet::add, HashSet::addAll);
     }
 
     /**
@@ -99,16 +103,9 @@ public class NucleusDistanceTool {
         // Only return positions that in the template, and that are not hyperlanes
         List<String> validAdjacentPositions = new ArrayList<>();
         for (String adjacentPosition : adjacentPositions) {
-            MapTemplateTile tile = positionToDraftTile.get(position);
-            if (tile == null) {
-                continue; //skip non-tile positions
+            if (legalPositions.contains(adjacentPosition)) {
+                validAdjacentPositions.add(adjacentPosition);
             }
-            String staticTileId = tile.getStaticTileId();
-            TileModel tileModel = staticTileId != null ? TileHelper.getTileById(staticTileId) : null;
-            if (tileModel != null && tileModel.isHyperlane()) {
-                continue; //skip non-game tiles
-            }
-            validAdjacentPositions.add(adjacentPosition);
         }
         return validAdjacentPositions;
     }

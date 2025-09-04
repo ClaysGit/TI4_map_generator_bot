@@ -97,11 +97,16 @@ public class SourceSettings extends SettingsMenu {
         ls.add(pok);
         ls.add(codexes);
         ls.add(discoStars);
-        ls.add(unchartedSpace);
+        // TODO: Add support for homebrew tiles. This entails adding to the slice/nucleus tile selection and balancing such
+        // that custom wormhole/legendary tiles are supported. Specifically, non-alphabeta wormholes, tiles with multiple wormholes,
+        // and anything else breaking that gets added in the future.
+        if (!(parent instanceof MiltySettings ms && ms.getDraftMode().getChosenKey().equals("nucleus")))
+            ls.add(unchartedSpace);
         ls.add(absol);
         ls.add(ignis);
         //ls.add(miltymod);
-        ls.add(eronous);
+        if (!(parent instanceof MiltySettings ms && ms.getDraftMode().getChosenKey().equals("nucleus")))
+            ls.add(eronous);
         // ls.add(cryypter);
         return ls;
     }
@@ -142,7 +147,7 @@ public class SourceSettings extends SettingsMenu {
         if (absol.isVal()) sources.add(ComponentSource.absol);
         //if (miltymod.isVal()) sources.add(ComponentSource.miltymod);
         if (eronous.isVal()) sources.add(ComponentSource.eronous);
-        if(ignis.isVal()) sources.add(ComponentSource.ignis_aurora);
+        if (ignis.isVal()) sources.add(ComponentSource.ignis_aurora);
         //if (cryypter.isVal()) sources.add(ComponentSource.cryypter);
         return sources;
     }
@@ -179,16 +184,14 @@ public class SourceSettings extends SettingsMenu {
                 // Decks for ABSOL
                 String agenda = ignis ? "agendas_baldrick" : "agendas_pok";
 
-                
                 String sc = ignis ? "ignis_aurora" : "pok";
-                
+
                 game.setStrategyCardSet(sc);
                 game.setEventDeckID("events_baldrick");
                 // set 'em up
                 decks.getRelics().setChosenKey(relic);
                 decks.getTechs().setChosenKey(techs);
                 decks.getAgendas().setChosenKey(agenda);
-                
 
                 String absolDS = "Reset your decks to include all of the Ignis cards.";
                 String pokStr = "Reset your decks to include only PoK cards.";
