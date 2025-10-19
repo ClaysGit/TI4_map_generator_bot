@@ -70,6 +70,7 @@ import ti4.service.emoji.SourceEmojis;
 import ti4.service.emoji.TechEmojis;
 import ti4.service.fow.FowCommunicationThreadService;
 import ti4.service.fow.GMService;
+import ti4.service.fow.RiftSetModeService;
 import ti4.service.info.SecretObjectiveInfoService;
 import ti4.service.leader.CommanderUnlockCheckService;
 import ti4.service.option.FOWOptionService.FOWOption;
@@ -379,7 +380,8 @@ public class AgendaHelper {
         for (String acId : player.getActionCards().keySet()) {
             ActionCardModel actionCard = Mapper.getActionCard(acId);
             String actionCardWindow = actionCard.getWindow();
-            if (actionCardWindow.contains("After an agenda is revealed")) {
+            if (actionCardWindow.contains("After an agenda is revealed")
+                    || actionCardWindow.contains("After the first agenda of this agenda phase is revealed")) {
                 names.add(actionCard.getName());
             }
         }
@@ -428,7 +430,8 @@ public class AgendaHelper {
         for (String acId : player.getActionCards().keySet()) {
             ActionCardModel actionCard = Mapper.getActionCard(acId);
             String actionCardWindow = actionCard.getWindow();
-            if (actionCardWindow.contains("After an agenda is revealed")) {
+            if (actionCardWindow.contains("After an agenda is revealed")
+                    || actionCardWindow.contains("After the first agenda of this agenda phase is revealed")) {
                 buttons.add(Buttons.green("queueAfter_ac_" + acId, actionCard.getName()));
             }
         }
@@ -902,14 +905,6 @@ public class AgendaHelper {
         event.getMessage().delete().queue();
         offerPreVote(player);
         resolveAfterQueue(event, game);
-        if (playerDoesNotHaveShenanigans(player)) {
-            String part2 = player.getFaction();
-            if (!game.getStoredValue("Pass On Shenanigans").isEmpty()) {
-                part2 = game.getStoredValue("Pass On Shenanigans") + "_" + player.getFaction();
-            }
-            game.setStoredValue("Pass On Shenanigans", part2);
-            return;
-        }
         String msg = player.getRepresentation() + " you have the option to pre-pass on agenda shenanigans here."
                 + " Agenda shenanigans are the action cards _Bribery_, _Confusing Legal Text_, _Confounding Legal Text_, and _Deadly Plot_."
                 + " Feel free not to pre-pass, this is simply an optional way to resolve agendas faster.";
@@ -1400,8 +1395,10 @@ public class AgendaHelper {
                     existingData += ";" + identifier + "_" + votes;
                 }
                 game.setCurrentAgendaVote(winner, existingData);
-                MessageHelper.sendMessageToChannel(
-                        player.getCorrectChannel(), Helper.buildSpentThingsMessageForVoting(player, game, false));
+                if (!game.isHiddenAgendaMode()) {
+                    MessageHelper.sendMessageToChannel(
+                            player.getCorrectChannel(), Helper.buildSpentThingsMessageForVoting(player, game, false));
+                }
             }
 
             String message = " up to vote! Please use the buttons to choose the outcome you wish to vote for.";
@@ -1447,7 +1444,9 @@ public class AgendaHelper {
                     }
                     ButtonHelperFactionSpecific.checkForGeneticRecombination(nextInLine, game);
                     CryypterHelper.checkForMentakEnvoy(nextInLine, game);
-                    MessageHelper.sendMessageToChannel(nextInLine.getCorrectChannel(), skippedMessage);
+                    if (!game.isHiddenAgendaMode()) {
+                        MessageHelper.sendMessageToChannel(nextInLine.getCorrectChannel(), skippedMessage);
+                    }
                     resolvingAnAgendaVote("resolveAgendaVote_" + votes, event, game, nextInLine);
                     return;
                 }
@@ -1552,9 +1551,15 @@ public class AgendaHelper {
         if (winner == null) {
             winner = getWinner(game);
         }
-        String summary2 = getSummaryOfVotes(game, true);
-        MessageHelper.sendMessageToChannel(game.getMainGameChannel(), summary2 + "\n \n");
-        GMService.logActivity(game, getSummaryOfVotes(game, true, true), false);
+        if (!game.isHiddenAgendaMode()) {
+            MessageHelper.sendMessageToChannel(game.getMainGameChannel(), getSummaryOfVotes(game, true) + "\n \n");
+        } else {
+            MessageHelper.sendMessageToChannel(
+                    game.getMainGameChannel(), getSummaryOfVotes(game, true, false, true) + "\n \n");
+            MessageHelper.sendMessageToChannel(
+                    game.getSpeaker().getCardsInfoThread(), getSummaryOfVotes(game, true) + "\n \n");
+        }
+        GMService.logActivity(game, getSummaryOfVotes(game, true, true, false), false);
         game.setPhaseOfGame("agendaEnd");
         game.setActivePlayerID(null);
         StringBuilder message = new StringBuilder();
@@ -2142,11 +2147,21 @@ public class AgendaHelper {
                                 potentialTech = ButtonHelperAbilities.getPossibleTechForNekroToGainFromPlayer(
                                         winningR, techGiver, potentialTech, game);
                             }
+                            List<Button> nekroBs = ButtonHelperAbilities.getButtonsForPossibleTechForNekro(
+                                    winningR, potentialTech, game);
+                            for (Player techGiver : voters) {
+                                if (winningR.hasUnlockedBreakthrough("nekrobt")
+                                        && !game.playerHasLeaderUnlockedOrAlliance(techGiver, "bastioncommander")) {
+                                    if (!game.getStoredValue("valefarZ").contains(techGiver.getFaction())) {
+                                        String vfzID = winningR.finChecker() + "valefarZ_" + techGiver.getFaction();
+                                        nekroBs.add(Buttons.blue(vfzID, "Copy Flagship", techGiver.getFactionEmoji()));
+                                    }
+                                }
+                            }
                             MessageHelper.sendMessageToChannelWithButtons(
                                     channel,
                                     identity + ", please resolve **Galactic Threat** ability using the buttons.",
-                                    ButtonHelperAbilities.getButtonsForPossibleTechForNekro(
-                                            winningR, potentialTech, game));
+                                    nekroBs);
                         }
                         if (specificVote.contains("Technology Rider") && !winningR.hasAbility("propagation")) {
 
@@ -2832,6 +2847,11 @@ public class AgendaHelper {
             voteAmount = 1;
         }
 
+        boolean executive = player.getFaction().equals(game.getStoredValue("executiveOrder"));
+        if (player.hasUnlockedBreakthrough("xxchabt") || executive) {
+            voteAmount = Math.max(p.getResources(), p.getInfluence());
+        }
+
         if (voteInfo[1] != 0) {
             voteAmount += p.getResources();
         }
@@ -3148,10 +3168,11 @@ public class AgendaHelper {
     }
 
     public static String getSummaryOfVotes(Game game, boolean capitalize) {
-        return getSummaryOfVotes(game, capitalize, false);
+        return getSummaryOfVotes(game, capitalize, false, false);
     }
 
-    private static String getSummaryOfVotes(Game game, boolean capitalize, boolean overwriteFog) {
+    private static String getSummaryOfVotes(
+            Game game, boolean capitalize, boolean overwriteFog, boolean redactFactionInfo) {
         String summary;
         Map<String, String> outcomes = game.getCurrentAgendaVotes();
         String agendaDetails = game.getCurrentAgendaInfo();
@@ -3231,7 +3252,6 @@ public class AgendaHelper {
                                     .append(" voted ")
                                     .append(vote)
                                     .append(" votes. ");
-
                         } else {
                             outcomeSummaryBuilder
                                     .append(faction)
@@ -3261,10 +3281,12 @@ public class AgendaHelper {
                                 .append(" ")
                                 .append(outcome)
                                 .append(": ")
-                                .append(totalVotes)
-                                .append(". (")
-                                .append(outcomeSummary)
-                                .append(")\n");
+                                .append(totalVotes);
+                        if (!redactFactionInfo) {
+                            summaryBuilder.append(". (").append(outcomeSummary).append(")\n");
+                        } else {
+                            summaryBuilder.append("\n");
+                        }
 
                     } else if (!game.isHomebrewSCMode()
                             && game.getCurrentAgendaInfo().contains("Elect Strategy Card")) {
@@ -3274,29 +3296,31 @@ public class AgendaHelper {
                                 .append(" **")
                                 .append(Helper.getSCName(Integer.parseInt(outcome), game))
                                 .append("**: ")
-                                .append(totalVotes)
-                                .append(". (")
-                                .append(outcomeSummary)
-                                .append(")\n");
+                                .append(totalVotes);
+                        if (!redactFactionInfo) {
+                            summaryBuilder.append(". (").append(outcomeSummary).append(")\n");
+                        } else {
+                            summaryBuilder.append("\n");
+                        }
                     } else {
-                        summaryBuilder
-                                .append("- ")
-                                .append(outcome)
-                                .append(": ")
-                                .append(totalVotes)
-                                .append(". (")
-                                .append(outcomeSummary)
-                                .append(")\n");
+                        summaryBuilder.append("- ").append(outcome).append(": ").append(totalVotes);
+                        if (!redactFactionInfo) {
+                            summaryBuilder.append(". (").append(outcomeSummary).append(")\n");
+                        } else {
+                            summaryBuilder.append("\n");
+                        }
                     }
                 } else {
                     summaryBuilder
                             .append("- ")
                             .append(outcome)
                             .append(": Total votes ")
-                            .append(totalVotes)
-                            .append(". ")
-                            .append(outcomeSummary)
-                            .append("\n");
+                            .append(totalVotes);
+                    if (!redactFactionInfo) {
+                        summaryBuilder.append(". ").append(outcomeSummary).append("\n");
+                    } else {
+                        summaryBuilder.append("\n");
+                    }
                 }
             }
             summary = summaryBuilder.toString();
@@ -4060,7 +4084,7 @@ public class AgendaHelper {
         MessageHelper.sendMessageToChannelWithButtons(channel, msg, proceedButtons);
         eraseAgendaQueues(event, game);
         if (!action) {
-            // offerEveryonePrepassOnShenanigans(game);
+            offerEveryonePrepassOnShenanigans(game);
             // offerEveryonePreAbstain(game);
             offerEveryoneWhensQueue(game);
             checkForAssigningGeneticRecombination(game);
@@ -4196,6 +4220,9 @@ public class AgendaHelper {
     }
 
     public static void showDiscards(Game game, GenericInteractionCreateEvent event) {
+        if (!RiftSetModeService.deckInfoAvailable(game.getPlayer(event.getUser().getId()), game)) {
+            return;
+        }
         StringBuilder sb2 = new StringBuilder();
         String sb = "### __**Discarded Agendas:**__";
         Map<String, Integer> discardAgendas = game.getDiscardAgendas();

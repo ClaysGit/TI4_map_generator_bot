@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
-import lombok.Data;
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
@@ -37,7 +36,6 @@ import ti4.map.Tile;
 import ti4.map.persistence.GameManager;
 import ti4.message.MessageHelper;
 import ti4.model.FactionModel;
-import ti4.model.MapTemplateModel;
 import ti4.model.Source;
 import ti4.model.Source.ComponentSource;
 import ti4.model.TechnologyModel;
@@ -241,40 +239,6 @@ public class MiltyService {
         ButtonHelper.deleteMessage(event);
     }
 
-    @Data
-    public static class DraftSpec {
-        Game game;
-        List<String> playerIDs, bannedFactions, priorityFactions, playerDraftOrder;
-        MapTemplateModel template;
-        List<Source.ComponentSource> tileSources, factionSources;
-        Integer numSlices, numFactions;
-
-        // slice generation settings
-        Boolean anomaliesCanTouch = false, extraWHs = true;
-        Double minRes = 2.0, minInf = 3.0;
-        Integer minTot = 9, maxTot = 13;
-        Integer minLegend = 1, maxLegend = 2;
-
-        // other
-        List<MiltyDraftSlice> presetSlices;
-
-        public DraftSpec(Game game) {
-            this.game = game;
-            playerIDs = new ArrayList<>(game.getPlayerIDs());
-            bannedFactions = new ArrayList<>();
-            priorityFactions = new ArrayList<>();
-
-            tileSources = new ArrayList<>();
-            tileSources.add(Source.ComponentSource.base);
-            tileSources.add(Source.ComponentSource.pok);
-            tileSources.add(Source.ComponentSource.codex1);
-            tileSources.add(Source.ComponentSource.codex2);
-            tileSources.add(Source.ComponentSource.codex3);
-            tileSources.add(Source.ComponentSource.codex4);
-            factionSources = new ArrayList<>(tileSources);
-        }
-    }
-
     public static void secondHalfOfPlayerSetup(
             Player player,
             Game game,
@@ -351,9 +315,14 @@ public class MiltyService {
             }
         }
 
+        String breakthrough = factionModel.getAlias() + "bt";
+        if (breakthrough.contains("keleres")) {
+            breakthrough = "keleresbt";
+        }
         // BREAKTHROUGH
-        if (game.isThundersEdge() && Mapper.getBreakthrough(factionModel.getAlias() + "bt") != null) {
-            player.setBreakthroughID(factionModel.getAlias() + "bt");
+        if (game.isThundersEdge() && Mapper.getBreakthrough(breakthrough) != null) {
+
+            player.setBreakthroughID(breakthrough);
             player.setBreakthroughUnlocked(false);
             player.setBreakthroughExhausted(false);
             player.setBreakthroughActive(false);
@@ -419,21 +388,28 @@ public class MiltyService {
             }
         }
 
-        Map<String, TechnologyModel> techReplacements = Mapper.getHomebrewTechReplaceMap(game.getTechnologyDeckID());
-        List<String> playerTechs = new ArrayList<>(player.getTechs());
-        for (String tech : playerTechs) {
-            TechnologyModel model = techReplacements.getOrDefault(tech, Mapper.getTech(tech));
-            if (!playerTechs.contains(model.getAlias())) {
-                player.addTech(model.getAlias());
-                player.removeTech(tech);
+        if (!"techs_tf".equals(game.getTechnologyDeckID())) {
+
+            Map<String, TechnologyModel> techReplacements =
+                    Mapper.getHomebrewTechReplaceMap(game.getTechnologyDeckID());
+            List<String> playerTechs = new ArrayList<>(player.getTechs());
+            for (String tech : playerTechs) {
+                TechnologyModel model = techReplacements.getOrDefault(tech, Mapper.getTech(tech));
+                if (!playerTechs.contains(model.getAlias())) {
+                    player.addTech(model.getAlias());
+                    player.removeTech(tech);
+                }
             }
-        }
 
-        for (String tech : factionModel.getFactionTech()) {
-            if (tech.trim().isEmpty()) continue;
+            for (String tech : factionModel.getFactionTech()) {
+                if (tech.trim().isEmpty()) continue;
+                if (tech.equalsIgnoreCase("iihq") && game.isThundersEdge()) {
+                    tech = "executiveorder";
+                }
+                TechnologyModel factionTech = techReplacements.getOrDefault(tech, Mapper.getTech(tech));
 
-            TechnologyModel factionTech = techReplacements.getOrDefault(tech, Mapper.getTech(tech));
-            player.addFactionTech(factionTech.getAlias());
+                player.addFactionTech(factionTech.getAlias());
+            }
         }
 
         if (setSpeaker) {
@@ -482,6 +458,10 @@ public class MiltyService {
         MessageHelper.sendMessageToPlayerCardsInfoThread(player, factionModel.getFactionSheetMessage());
         AbilityInfoService.sendAbilityInfo(player, event);
         TechInfoService.sendTechInfo(game, player, event);
+        if (game.isThundersEdge() && player.hasLeader("xxchahero")) {
+            player.removeLeader("xxchahero");
+            player.addLeader("xxchahero-te");
+        }
         LeaderInfoService.sendLeadersInfo(game, player, event);
         UnitInfoService.sendUnitInfo(game, player, event, false);
         PromissoryNoteHelper.sendPromissoryNoteInfo(game, player, false, event);
@@ -689,6 +669,7 @@ public class MiltyService {
             player.removeOwnedPromissoryNoteByID(player.getColor() + "_sftt");
             player.removePromissoryNote(player.getColor() + "_sftt");
         }
+
         if (game.isRapidMobilizationMode()) {
             Tile tile2 = player.getHomeSystemTile();
             if (tile2 != null

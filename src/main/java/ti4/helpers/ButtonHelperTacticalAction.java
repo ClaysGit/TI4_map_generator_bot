@@ -23,6 +23,7 @@ import ti4.map.UnitHolder;
 import ti4.message.MessageHelper;
 import ti4.model.UnitModel;
 import ti4.service.agenda.IsPlayerElectedService;
+import ti4.service.breakthrough.EidolonMaximumService;
 import ti4.service.breakthrough.VoidTetherService;
 import ti4.service.combat.StartCombatService;
 import ti4.service.emoji.FactionEmojis;
@@ -31,6 +32,7 @@ import ti4.service.emoji.TechEmojis;
 import ti4.service.emoji.UnitEmojis;
 import ti4.service.fow.FOWPlusService;
 import ti4.service.fow.LoreService;
+import ti4.service.fow.RiftSetModeService;
 import ti4.service.leader.CommanderUnlockCheckService;
 import ti4.service.tactical.TacticalActionService;
 import ti4.service.turn.StartTurnService;
@@ -42,6 +44,7 @@ public class ButtonHelperTacticalAction {
     @ButtonHandler("doneWithTacticalAction")
     public static void concludeTacticalAction(Player player, Game game, ButtonInteractionEvent event) {
         if (!game.isL1Hero() && !FOWPlusService.isVoid(game, game.getActiveSystem())) {
+            RiftSetModeService.concludeTacticalAction(player, game, event);
             ButtonHelper.exploreDET(player, game, event);
             ButtonHelperFactionSpecific.cleanCavUp(game, event);
             if (player.hasAbility("cunning")) {
@@ -183,6 +186,7 @@ public class ButtonHelperTacticalAction {
                     + ", the Maximus (Dih-Mohn Flagship) moved into the active system, so you may produce up to 2 units with a combined cost of 4 or less.";
             MessageHelper.sendMessageToChannelWithButton(player.getCorrectChannel(), msg, produce);
         }
+        EidolonMaximumService.sendEidolonMaximumFlipButtons(game, player);
         if (unitsWereMoved) {
             CommanderUnlockCheckService.checkPlayer(player, "nivyn", "ghoti", "zelian", "gledge", "mortheus");
             CommanderUnlockCheckService.checkAllPlayersInGame(game, "empyrean");
@@ -489,7 +493,9 @@ public class ButtonHelperTacticalAction {
         }
 
         List<Button> button2 = ButtonHelper.scanlinkResolution(player, tile, game);
-        if ((player.getTechs().contains("sdn") || player.getTechs().contains("absol_sdn"))
+        if ((player.getTechs().contains("sdn")
+                        || player.getTechs().contains("absol_sdn")
+                        || player.getTechs().contains("wavelength"))
                 && !button2.isEmpty()
                 && !game.isL1Hero()) {
             MessageHelper.sendMessageToChannelWithButtons(

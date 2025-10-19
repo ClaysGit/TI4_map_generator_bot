@@ -375,6 +375,12 @@ public class AutoCompleteProvider {
                 List<Command.Choice> options = mapTo25ChoicesThatContain(values, enteredValue);
                 event.replyChoices(options).queue();
             }
+            case Constants.EXPEDITION -> {
+                String enteredValue = event.getFocusedOption().getValue();
+                var values = List.of("secret", "actionCards", "fiveInf", "fiveRes", "tradeGoods", "techSkip");
+                List<Command.Choice> options = mapTo25ChoicesThatContain(values, enteredValue);
+                event.replyChoices(options).queue();
+            }
             case Constants.TECH_TYPE -> {
                 String enteredValue = event.getFocusedOption().getValue();
                 var values = List.of("cybernetic", "biotic", "warfare", "propulsion");
@@ -1081,7 +1087,7 @@ public class AutoCompleteProvider {
             }
             case Constants.SEAT_COUNT_OPTION -> {
                 String enteredValue = event.getFocusedOption().getValue();
-                if (enteredValue != null && !enteredValue.isBlank()) return;
+                if (!enteredValue.isBlank()) return;
 
                 if (!GameManager.isValid(gameName)) return;
                 Game game = GameManager.getManagedGame(gameName).getGame();
@@ -1095,7 +1101,7 @@ public class AutoCompleteProvider {
                 MapTemplateModel mapTemplate = Mapper.getMapTemplate(mapTemplateId);
                 if (mapTemplate == null) return;
                 int maxSeats = mapTemplate.getPlayerCount();
-                event.replyChoice(maxSeats + " seats", (long) maxSeats).queue();
+                event.replyChoice(maxSeats + " seats", maxSeats).queue();
             }
             case Constants.DRAFT_SLICE_OPTION -> {
                 if (!GameManager.isValid(gameName)) return;
@@ -1166,7 +1172,7 @@ public class AutoCompleteProvider {
 
                 int playerCount = draftManager.getPlayerStates().size();
                 int maxSeats = Math.min(playerCount, 8);
-                event.replyChoice(maxSeats + " speaker order positions", (long) maxSeats)
+                event.replyChoice(maxSeats + " speaker order positions", maxSeats)
                         .queue();
             }
         }
@@ -1563,6 +1569,7 @@ public class AutoCompleteProvider {
                 .filter(model -> model.search(enteredValue, source))
                 .filter(model -> model.getSource() != ComponentSource.miltymod
                         && model.getSource() != ComponentSource.project_pi
+                        && model.getSource() != ComponentSource.twilights_fall
                         && model.getSource() != ComponentSource.asteroid)
                 .filter(model -> !(model instanceof ColorableModelInterface cm) || !cm.isDupe())
                 .limit(25)

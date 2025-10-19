@@ -79,16 +79,19 @@ import ti4.service.PlanetService;
 import ti4.service.StatusCleanupService;
 import ti4.service.agenda.IsPlayerElectedService;
 import ti4.service.breakthrough.AutoFactoriesService;
+import ti4.service.breakthrough.EidolonMaximumService;
 import ti4.service.button.ReactionService;
 import ti4.service.combat.CombatRollService;
 import ti4.service.combat.CombatRollType;
 import ti4.service.combat.StartCombatService;
 import ti4.service.emoji.CardEmojis;
+import ti4.service.emoji.ColorEmojis;
 import ti4.service.emoji.FactionEmojis;
 import ti4.service.emoji.MiscEmojis;
 import ti4.service.emoji.PlanetEmojis;
 import ti4.service.emoji.TechEmojis;
 import ti4.service.fow.FOWCombatThreadMirroring;
+import ti4.service.fow.LoreService;
 import ti4.service.game.EndGameService;
 import ti4.service.game.StartPhaseService;
 import ti4.service.game.SwapFactionService;
@@ -97,7 +100,7 @@ import ti4.service.info.SecretObjectiveInfoService;
 import ti4.service.leader.CommanderUnlockCheckService;
 import ti4.service.objectives.RevealPublicObjectiveService;
 import ti4.service.objectives.ScorePublicObjectiveService;
-import ti4.service.option.GameOptionService;
+import ti4.service.option.TEOptionService;
 import ti4.service.planet.AddPlanetToPlayAreaService;
 import ti4.service.player.RefreshCardsService;
 import ti4.service.strategycard.PlayStrategyCardService;
@@ -168,7 +171,7 @@ public class UnfiledButtonHandlers {
     }
 
     @ButtonHandler("enableDaneMode_")
-    public static void enableDaneMode(ButtonInteractionEvent event, String buttonID, Game game) {
+    public static void enableGalacticEvent(ButtonInteractionEvent event, String buttonID, Game game) {
         String mode = buttonID.split("_")[1];
         boolean enable = "enable".equalsIgnoreCase(buttonID.split("_")[2]);
         String message = "Successfully " + buttonID.split("_")[2] + "d the ";
@@ -299,7 +302,7 @@ public class UnfiledButtonHandlers {
             message += "Stellar Atomics Mode. Nothing more needs to be done.";
         }
         MessageHelper.sendMessageToChannel(event.getChannel(), message);
-        List<Button> buttons = GameOptionService.getDaneLeakModeButtons(game);
+        List<Button> buttons = TEOptionService.getGalacticEventButtons(game);
         event.getMessage()
                 .editMessage(event.getMessage().getContentRaw())
                 .setComponents(ButtonHelper.turnButtonListIntoActionRowList(buttons))
@@ -1593,6 +1596,59 @@ public class UnfiledButtonHandlers {
             }
         }
         ButtonHelper.deleteMessage(event);
+
+        if (game.isTwilightsFallMode()) {
+            String assignSpeakerMessage =
+                    player.getRepresentation() + ", please choose a faction below to receive the Tyrant token.";
+            List<Button> assignSpeakerActionRow = getTyrannusAssignTyrantButtons(game, player);
+            MessageHelper.sendMessageToChannelWithButtons(
+                    player.getCorrectChannel(), assignSpeakerMessage, assignSpeakerActionRow);
+        }
+    }
+
+    @ButtonHandler("assignTyrant_")
+    public static void assignTyrant(ButtonInteractionEvent event, Player player, String buttonID, Game game) {
+        String faction = buttonID.replace("assignTyrant_", "");
+        for (Player player_ : game.getPlayers().values()) {
+            if (player_.getFaction().equals(faction)) {
+                game.setTyrantUserID(player_.getUserID());
+                String message =
+                        MiscEmojis.SpeakerToken + " Tyrant assigned to: " + player_.getRepresentation(false, true);
+                MessageHelper.sendMessageToChannel(player.getCorrectChannel(), message);
+                if (game.isFowMode() && player != player_) {
+                    MessageHelper.sendMessageToChannel(player_.getPrivateChannel(), message);
+                }
+                if (!game.isFowMode()) {
+                    ButtonHelper.sendMessageToRightStratThread(player, game, message, "politics");
+                }
+            }
+        }
+        ButtonHelper.deleteMessage(event);
+    }
+
+    private static List<Button> getTyrannusAssignTyrantButtons(Game game, Player politicsHolder) {
+        List<Button> assignSpeakerButtons = new ArrayList<>();
+        for (Player player : game.getRealPlayers()) {
+            if (!player.isSpeaker() && !player.isTyrant()) {
+                String faction = player.getFaction();
+                if (Mapper.isValidFaction(faction)) {
+                    Button button;
+                    if (!game.isFowMode()) {
+                        button = Buttons.gray(
+                                politicsHolder.getFinsFactionCheckerPrefix() + "assignTyrant_" + faction,
+                                " ",
+                                player.getFactionEmoji());
+                    } else {
+                        button = Buttons.gray(
+                                politicsHolder.getFinsFactionCheckerPrefix() + "assignTyrant_" + faction,
+                                player.getColor(),
+                                ColorEmojis.getColorEmoji(player.getColor()));
+                    }
+                    assignSpeakerButtons.add(button);
+                }
+            }
+        }
+        return assignSpeakerButtons;
     }
 
     public static void poScoring(
@@ -1776,10 +1832,25 @@ public class UnfiledButtonHandlers {
             MessageHelper.sendMessageToChannel(
                     event.getMessageChannel(),
                     "Successfully queued an objective to score (wont score it if you later become unable to score it).");
+            List<Button> buttons = new ArrayList<>();
+            buttons.add(Buttons.gray("reverse" + buttonID, "Unqueue it"));
+            MessageHelper.sendMessageToChannel(
+                    event.getMessageChannel(), "You can use this to unqueue it and queue something else.", buttons);
         } else {
             MessageHelper.sendMessageToChannel(
                     event.getMessageChannel(),
                     "The game is not currently in the action phase, and so no scoring was queued. Go score normally.");
+        }
+    }
+
+    @ButtonHandler("reversepreScoreObbie_")
+    public static void reversepreScoreObbie(ButtonInteractionEvent event, String buttonID, Game game, Player player) {
+        ButtonHelper.deleteMessage(event);
+        if (game.getPhaseOfGame().contains("action")) {
+            String poOrSO = buttonID.split("_")[1];
+            game.setStoredValue(player.getFaction() + "Round" + game.getRound() + "PreScored" + poOrSO, "");
+            MessageHelper.sendMessageToChannel(event.getMessageChannel(), "Successfully unqueued an objective.");
+            StatusHelper.offerPreScoringButtons(game, player);
         }
     }
 
@@ -1988,7 +2059,7 @@ public class UnfiledButtonHandlers {
                     }
                 });
                 AutoFactoriesService.resolveAutoFactories(game, player, buttonID);
-
+                EidolonMaximumService.sendEidolonMaximumFlipButtons(game, player);
                 int cost = Helper.calculateCostOfProducedUnits(player, game, true);
                 game.setStoredValue("producedUnitCostFor" + player.getFaction(), "" + cost);
                 player.setTotalExpenses(
@@ -2239,6 +2310,9 @@ public class UnfiledButtonHandlers {
                     MessageHelper.sendMessageToChannelWithButtons(player.getCorrectChannel(), warfareDone, redistro);
                 }
 
+                if (game.isFowMode()) {
+                    LoreService.showSystemLore(player, game, game.getActiveSystem());
+                }
                 ButtonHelperTacticalAction.resetStoredValuesForTacticalAction(game);
                 game.removeStoredValue("producedUnitCostFor" + player.getFaction());
 
@@ -2425,10 +2499,17 @@ public class UnfiledButtonHandlers {
             }
             case "pass_on_abilities" -> {
                 if (game.isCustodiansScored() || game.isOmegaPhaseMode()) {
-                    Button flipAgenda = Buttons.blue("flip_agenda", "Flip Agenda");
-                    List<Button> buttons = List.of(flipAgenda);
-                    MessageHelper.sendMessageToChannelWithButtons(
-                            event.getChannel(), "Please flip agenda now.", buttons);
+                    if (game.isTwilightsFallMode()) {
+                        Button flipAgenda = Buttons.blue("edictPhase", "Do Edict Phase");
+                        List<Button> buttons = List.of(flipAgenda);
+                        MessageHelper.sendMessageToChannelWithButtons(
+                                event.getChannel(), "Please proceed to edict phase now.", buttons);
+                    } else {
+                        Button flipAgenda = Buttons.blue("flip_agenda", "Flip Agenda");
+                        List<Button> buttons = List.of(flipAgenda);
+                        MessageHelper.sendMessageToChannelWithButtons(
+                                event.getChannel(), "Please flip agenda now.", buttons);
+                    }
                 } else {
                     MessageHelper.sendMessageToChannel(
                             event.getMessageChannel(),
@@ -2443,13 +2524,23 @@ public class UnfiledButtonHandlers {
             case "redistributeCCButtons" -> {
                 if (game.isCustodiansScored() || game.isOmegaPhaseMode()) {
                     // new RevealAgenda().revealAgenda(event, false, map, event.getChannel());
-                    Button flipAgenda = Buttons.blue("flip_agenda", "Flip Agenda");
-                    List<Button> buttons = List.of(flipAgenda);
-                    MessageHelper.sendMessageToChannelWithButtons(
-                            event.getChannel(),
-                            "This message was triggered by the last player pressing \"Redistribute Command Tokens\"."
-                                    + " Please press the \"Flip Agenda\" button after they have finished redistributing tokens and you have fully resolved all other Status Phase effects.",
-                            buttons);
+                    if (game.isTwilightsFallMode()) {
+                        Button flipAgenda = Buttons.blue("edictPhase", "Do Edict Phase");
+                        List<Button> buttons = List.of(flipAgenda);
+                        MessageHelper.sendMessageToChannelWithButtons(
+                                event.getChannel(),
+                                "Please proceed to edict phase after the last person finishing doing CCs.",
+                                buttons);
+                    } else {
+                        Button flipAgenda = Buttons.blue("flip_agenda", "Flip Agenda");
+                        List<Button> buttons = List.of(flipAgenda);
+                        MessageHelper.sendMessageToChannelWithButtons(
+                                event.getChannel(),
+                                "This message was triggered by the last player pressing \"Redistribute Command Tokens\"."
+                                        + " Please press the \"Flip Agenda\" button after they have finished redistributing tokens and you have fully resolved all other Status Phase effects.",
+                                buttons);
+                    }
+
                 } else {
                     Button flipAgenda = Buttons.blue("startStrategyPhase", "Start Strategy Phase");
                     List<Button> buttons = List.of(flipAgenda);
@@ -3501,11 +3592,6 @@ public class UnfiledButtonHandlers {
     public static void primaryOfTeWarfare(ButtonInteractionEvent event, Player player, Game game, String buttonID) {
         StrategyCardModel model = Mapper.getStrategyCard("te6warfare");
         if (model == null) return;
-        if (!player.getSCs().contains(model.getInitiative()) && !buttonID.contains("overrule")) {
-            MessageHelper.sendMessageToChannel(
-                    player.getCorrectChannel(), "You do not have the Warfare strategy card.");
-            return;
-        }
 
         List<Button> buttons = new ArrayList<>();
         buttons.add(Buttons.blue(
