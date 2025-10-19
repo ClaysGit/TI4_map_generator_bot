@@ -26,6 +26,7 @@ import ti4.map.Player;
 import ti4.message.GameMessageManager;
 import ti4.message.GameMessageType;
 import ti4.message.MessageHelper;
+import ti4.service.draft.BagChannelService;
 import ti4.service.game.SetOrderService;
 import ti4.service.milty.MiltyService;
 
@@ -137,10 +138,10 @@ public class FrankenDraftBagService {
 
     public static void showPlayerBag(Game game, Player player) {
         BagDraft draft = game.getActiveBagDraft();
-        ThreadChannel bagChannel = draft.regenerateBagChannel(player);
+        ThreadChannel bagChannel = BagChannelService.regenerateBagChannel(game, player);
         if (player.isReadyToPassBag()) {
             MessageHelper.sendMessageToChannel(
-                    draft.findExistingBagChannel(player),
+                    BagChannelService.findExistingBagChannel(game, player),
                     player.getRepresentationUnfogged()
                             + " your Draft Bag is ready to pass and you are waiting for the other players to finish drafting.");
             return;

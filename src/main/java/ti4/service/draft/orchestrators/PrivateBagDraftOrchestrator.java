@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import lombok.Getter;
 import lombok.Setter;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import ti4.buttons.Buttons;
@@ -19,19 +20,11 @@ import ti4.helpers.settingsFramework.menus.SettingsMenu;
 import ti4.map.Game;
 import ti4.map.Player;
 import ti4.message.MessageHelper;
-import ti4.service.draft.DraftButtonService;
-import ti4.service.draft.DraftChoice;
-import ti4.service.draft.DraftManager;
+import ti4.message.logging.BotLogger;
+import ti4.message.logging.LogOrigin;
+import ti4.service.draft.*;
 import ti4.service.draft.DraftManager.CommandSource;
-import ti4.service.draft.DraftOrchestrator;
-import ti4.service.draft.DraftPlayerManager;
-import ti4.service.draft.Draftable;
-import ti4.service.draft.DraftableType;
-import ti4.service.draft.OrchestratorState;
-import ti4.service.draft.PartialMapService;
-import ti4.service.draft.PlayerDraftState;
 import ti4.service.draft.PlayerSetupService.PlayerSetupState;
-import ti4.service.draft.PublicDraftInfoService;
 
 /**
  * This draft orchestrator implements a prvate bag draft.
@@ -157,15 +150,34 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
 
     @Override
     public void sendDraftButtons(DraftManager draftManager) {
-        List<String> playerOrder = getDraftOrder(draftManager);
-        String currentPlayerUserId = getCurrentPlayer(playerOrder);
-        draftManager.getGame().setActivePlayerID(currentPlayerUserId);
-        PublicDraftInfoService.send(
-                draftManager,
-                playerOrder,
-                currentPlayerUserId,
-                getNextPlayer(playerOrder),
-                List.of(getReprintDraftButton()));
+        Game game = draftManager.getGame();
+        // No active player during bag draft
+        game.updateActivePlayer(null);
+
+        for(String playerUserId : draftManager.getPlayerUserIds()) {
+            Player player = game.getPlayer(playerUserId);
+            if(player == null) {
+                BotLogger.warning(new LogOrigin(game), "Cannot find drafting player in game: " + playerUserId);
+                continue;
+            }
+
+            // Get the player's bag channel, creating it if necessary
+            MessageChannel bagChannel = BagChannelService.findExistingBagChannel(game, player);
+            if(bagChannel == null) {
+                bagChannel = BagChannelService.regenerateBagChannel(game, player);
+            }
+
+            PlayerDraftState playerDraftState = draftManager.getPlayerStates().get(playerUserId);
+            State orchestratorState = (State) playerDraftState.getOrchestratorState();
+            
+        }
+
+        // PublicDraftInfoService.send(
+        //         draftManager,
+        //         playerOrder,
+        //         currentPlayerUserId,
+        //         getNextPlayer(playerOrder),
+        //         List.of(getReprintDraftButton()));
     }
 
     @Override
@@ -280,7 +292,7 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
 
     @Override
     public String getButtonPrefix() {
-        return "psd_";
+        return "pbd_";
     }
 
     private Button getReprintDraftButton() {
@@ -363,31 +375,5 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
             }
         }
         return playerOrder;
-    }
-
-    private String getCurrentPlayer(List<String> playerOrder) {
-        return playerOrder.get(currentPlayerIndex);
-    }
-
-    private String getNextPlayer(List<String> playerOrder) {
-        int nextIndex = currentPlayerIndex + (isReversing ? -1 : 1);
-        if (nextIndex < 0 || nextIndex >= playerOrder.size()) {
-            // When you get to an end of the snake, the next player is the current player
-            // repeated.
-            return playerOrder.get(currentPlayerIndex);
-        }
-
-        return playerOrder.get(nextIndex);
-    }
-
-    private void advanceToNextPlayer(List<String> playerOrder) {
-        currentPlayerIndex += isReversing ? -1 : 1;
-        if (currentPlayerIndex < 0) {
-            currentPlayerIndex = 0;
-            isReversing = false;
-        } else if (currentPlayerIndex >= playerOrder.size()) {
-            currentPlayerIndex = playerOrder.size() - 1;
-            isReversing = true;
-        }
     }
 }

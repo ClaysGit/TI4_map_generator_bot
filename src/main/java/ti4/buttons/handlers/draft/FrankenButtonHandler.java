@@ -16,6 +16,7 @@ import ti4.map.Player;
 import ti4.message.MessageHelper;
 import ti4.model.DraftErrataModel;
 import ti4.model.FactionModel;
+import ti4.service.draft.BagChannelService;
 import ti4.service.franken.FrankenAbilityService;
 import ti4.service.franken.FrankenDraftBagService;
 import ti4.service.franken.FrankenFactionTechService;
@@ -178,18 +179,18 @@ class FrankenButtonHandler {
                     draft.setPlayerReadyToPass(player, true);
 
                     // Clear out all existing messages
-                    draft.findExistingBagChannel(player)
+                    BagChannelService.findExistingBagChannel(game, player)
                             .getHistory()
                             .retrievePast(100)
                             .queue(m -> {
                                 if (!m.isEmpty()) {
-                                    draft.findExistingBagChannel(player)
+                                    BagChannelService.findExistingBagChannel(game, player)
                                             .deleteMessages(m)
                                             .queue();
                                 }
                             });
                     MessageHelper.sendMessageToChannel(
-                            draft.findExistingBagChannel(player),
+                            BagChannelService.findExistingBagChannel(game, player),
                             "Your Draft Bag is ready to pass and you are waiting for the other players to finish drafting.");
                     MessageHelper.sendMessageToChannel(
                             player.getCardsInfoThread(),
