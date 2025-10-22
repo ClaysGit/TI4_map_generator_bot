@@ -7,10 +7,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
+
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.MessageTopLevelComponent;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.MessageHistory;
@@ -26,12 +29,16 @@ import ti4.map.Game;
 import ti4.map.Player;
 import ti4.message.MessageHelper;
 import ti4.message.MessageHelper.MessageFunction;
+import ti4.message.componentsV2.MessageV2Builder;
+import ti4.message.componentsV2.MessageV2Editor;
 import ti4.message.logging.BotLogger;
 import ti4.message.logging.LogOrigin;
 import ti4.spring.jda.JdaService;
 
 @UtilityClass
 public class BagDraftMessageService {
+    private static final String PICK_SUMMARY_START = "### Pending Picks";
+
     public static void sendPlayerDraftInfo(
             DraftManager draftManager,
             String playerUserId,
@@ -51,79 +58,100 @@ public class BagDraftMessageService {
         MessageChannel channel = BagChannelService.regenerateBagChannel(game, player);
         if (channel == null) return;
 
+        MessageV2Builder builder = new MessageV2Builder(channel);
+
         for (Draftable d : draftManager.getDraftables()) {
             String uniqueKey = game.getName() + "_" + d.getType().toString().toLowerCase();
             FileUpload uploadedImage = d.generateSummaryImage(draftManager, uniqueKey, visibleChoiceKeys);
             if (uploadedImage != null) {
-                MessageHelper.sendFileUploadToChannel(channel, uploadedImage);
+                builder.appendInlineImage(uploadedImage);
+                // MessageHelper.sendFileUploadToChannel(channel, uploadedImage);
             }
         }
 
+        
+
         String draftSummary = getSummary(draftManager, visibleChoiceKeys);
-        MessageHelper.sendMessageToChannel(channel, draftSummary);
+        builder.append(draftSummary);
 
         for (Draftable d : draftManager.getDraftables()) {
             String draftableHeader = getSectionHeader(d.getDisplayName());
-            List<Button> buttons = new ArrayList<>(getDraftButtons(draftManager, d, visibleChoiceKeys));
+            List<MessageTopLevelComponent> buttons = new ArrayList<>(getDraftButtons(draftManager, d, visibleChoiceKeys));
 
-            MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, draftableHeader, buttons);
+            builder.appendLine(draftableHeader);
+            buttons.forEach(builder::append);
+            // builder.append(buttons);
+
+            // MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, draftableHeader, buttons);
         }
 
-        // TODO: All of these messages should just be one v2 message, using Sections to organize buttons
         String pendingPickSummary = getPendingPickSummary(draftManager, pendingPicks);
-        MessageHelper.sendMessageToChannel(channel, pendingPickSummary);
+        builder.appendReplaceableText(pendingPickSummary);
+        if (extraButtons != null && !extraButtons.isEmpty()) {
+            builder.append(extraButtons);
+        }
+        // MessageHelper.sendMessageToChannel(channel, pendingPickSummary);
+
+        builder.send();
     }
 
-    public static void sendPublicSummary(
-        DraftManager draftManager,
-        int lockedInPlayers
-    ) {
-        Game game = draftManager.getGame();
-        MessageChannel channel = game.getMainGameChannel();
-        if (channel == null) return;
+    // public static void sendPublicSummary(
+    //     DraftManager draftManager,
+    //     int lockedInPlayers
+    // ) {
+    //     Game game = draftManager.getGame();
+    //     MessageChannel channel = game.getMainGameChannel();
+    //     if (channel == null) return;
 
-        String summary = "### Draft Summary\n"
-                + "> " + lockedInPlayers + " / " + draftManager.getPlayerUserIds().size() + " players have locked in their bags.\n";
+    //     String summary = "### Draft Summary\n"
+    //             + "> " + lockedInPlayers + " / " + draftManager.getPlayerUserIds().size() + " players have locked in their bags.\n";
 
-        MessageHelper.sendMessageToChannel(channel, summary);
-    }
+    //     MessageHelper.sendMessageToChannel(channel, summary);
+    // }
 
     public static void editPlayerDraftInfo(
             GenericInteractionCreateEvent event,
             DraftManager draftManager,
             String playerUserId,
-            List<String> visibleChoiceKeys,
+            // List<String> visibleChoiceKeys,
             List<String> pendingPicks) {
 
         Game game = draftManager.getGame();
         MessageChannel channel = game.getMainGameChannel();
         if (channel == null) return;
 
+        MessageV2Editor editor = new MessageV2Editor(channel);
+
         String pendingPickSummary = getPendingPickSummary(draftManager, pendingPicks);
+        editor.replace("^" + PICK_SUMMARY_START, pendingPickSummary);
 
-        getMessageHistory(event, channel)
-                .queue(editDraftInfo(draftManager, visibleChoiceKeys, pendingPicks, pendingPickSummary), BotLogger::catchRestError);
+        if(event instanceof ButtonInteractionEvent buttonEvent) {
+            String buttonId = buttonEvent.getCustomId();
+        }
+
+        // getMessageHistory(event, channel)
+        //         .queue(editDraftInfo(draftManager, visibleChoiceKeys, pendingPicks, pendingPickSummary), BotLogger::catchRestError);
     }
 
-    public static void pingCurrentPlayer(
-            DraftManager draftManager,
-            String currentPlayerUserID,
-            List<String> clearMessageHeaders,
-            List<String> clearAttachments,
-            List<Button> extraButtons) {
-        Game game = draftManager.getGame();
-        String msg = "Nobody is up to draft...";
-        Player p = game.getPlayer(currentPlayerUserID);
-        if (p != null) msg = "### " + p.getPing() + " is up to draft!";
+    // public static void pingCurrentPlayer(
+    //         DraftManager draftManager,
+    //         String currentPlayerUserID,
+    //         List<String> clearMessageHeaders,
+    //         List<String> clearAttachments,
+    //         List<Button> extraButtons) {
+    //     Game game = draftManager.getGame();
+    //     String msg = "Nobody is up to draft...";
+    //     Player p = game.getPlayer(currentPlayerUserID);
+    //     if (p != null) msg = "### " + p.getPing() + " is up to draft!";
 
-        List<Button> buttons = new ArrayList<>(extraButtons != null ? extraButtons : List.of());
-        buttons = MessageHelper.addUndoButtonToList(buttons, game.getName());
+    //     List<Button> buttons = new ArrayList<>(extraButtons != null ? extraButtons : List.of());
+    //     buttons = MessageHelper.addUndoButtonToList(buttons, game.getName());
 
-        MessageChannel channel = game.getMainGameChannel();
-        if (channel == null) return;
-        MessageFunction clearOldFunc = clearOldPingsAndButtonsFunc(true, clearMessageHeaders, clearAttachments);
-        MessageHelper.splitAndSentWithAction(msg, channel, buttons, clearOldFunc);
-    }
+    //     MessageChannel channel = game.getMainGameChannel();
+    //     if (channel == null) return;
+    //     MessageFunction clearOldFunc = clearOldPingsAndButtonsFunc(true, clearMessageHeaders, clearAttachments);
+    //     MessageHelper.splitAndSentWithAction(msg, channel, buttons, clearOldFunc);
+    // }
 
     // Produce button message
 

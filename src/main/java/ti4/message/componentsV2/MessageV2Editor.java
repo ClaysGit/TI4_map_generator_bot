@@ -11,18 +11,15 @@ import net.dv8tion.jda.api.components.selections.EntitySelectMenu;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
-import ti4.message.GameMessageType;
-import ti4.message.MessageHelper;
 
 public class MessageV2Editor {
     private final MessageChannel channel;
-    private final GameMessageType messageType;
-    private final List<ReplaceMessagePart> replace = new ArrayList<>();
+    private final List<ReplaceMessagePart> replaceByCustomId = new ArrayList<>();
+    private final List<ReplaceMessagePart> replaceByPattern = new ArrayList<>();
 
-    public MessageV2Editor(MessageChannel channel, GameMessageType messageType) {
+    public MessageV2Editor(MessageChannel channel) {
         Objects.requireNonNull(channel, "Channel cannot be null");
         this.channel = channel;
-        this.messageType = messageType;
     }
 
     public enum MessagePartType {
@@ -43,7 +40,7 @@ public class MessageV2Editor {
          * The key to identify what's being replaced. Use
          * depends on the type:
          * - BUTTONS, STRING_SELECT, ENTITY_SELECT: the custom ID of the component
-         * - TEXT_DISPLAY: the starting text the component content
+         * - TEXT_DISPLAY: any text in the component content
          * - MEDIA_GALLERY: a part of the file name
          */
         @Getter
@@ -85,38 +82,52 @@ public class MessageV2Editor {
     }
 
     public MessageV2Editor replace(String oldId, Button button) {
-        replace.add(new ReplaceMessagePart(oldId, button));
+        replaceByCustomId.add(new ReplaceMessagePart(oldId, button));
         return this;
     }
 
     public MessageV2Editor replace(String oldId, StringSelectMenu stringSelectMenu) {
-        replace.add(new ReplaceMessagePart(oldId, stringSelectMenu));
+        replaceByCustomId.add(new ReplaceMessagePart(oldId, stringSelectMenu));
         return this;
     }
 
     public MessageV2Editor replace(String oldId, EntitySelectMenu entitySelectMenu) {
-        replace.add(new ReplaceMessagePart(oldId, entitySelectMenu));
-        return this;
-    }
-
-    public MessageV2Editor replace(String partialFilename, MediaGallery mediaGallery) {
-        replace.add(new ReplaceMessagePart(partialFilename, mediaGallery));
+        replaceByCustomId.add(new ReplaceMessagePart(oldId, entitySelectMenu));
         return this;
     }
 
     /**
-     * TODO: Should this be a regex match instead?
-     * For text replacement, replace ALL TextDisplay components whose content starts with the provided string
-     * @param componentStartsWith A string to test against the start of each TextDisplay. (text displays don't have convenient IDs to look up)
-     * @param newContent A replacement line of text.
+     * For media gallery replacement, replace MediaGallery components whose filename contains the provided pattern
+     * @param filenamePattern A string to test against each MediaGallery item's filenames.
+     * @param mediaGallery A replacement MediaGallery.
      */
-    public MessageV2Editor replace(String componentStartsWith, TextDisplay newContent) {
-        replace.add(new ReplaceMessagePart(componentStartsWith, newContent));
+    public MessageV2Editor replace(String filenamePattern, MediaGallery mediaGallery) {
+        replaceByPattern.add(new ReplaceMessagePart(filenamePattern, mediaGallery));
         return this;
     }
 
+    /**
+     * For text replacement, replace ALL TextDisplay components whose content matches with the provided regex string
+     * @param contentPattern A string to test against each text component.
+     * @param newContent A replacement TextDisplay.
+     */
+    public MessageV2Editor replace(String contentPattern, TextDisplay newContent) {
+        replaceByPattern.add(new ReplaceMessagePart(contentPattern, newContent));
+        return this;
+    }
+
+    /**
+     * Replace text content in a message. It's recommended to send text which may be replaced using MessageV2Builder::appendReplaceableText,
+     * otherwise this may unintentionally replace additional text near the intended target.
+     * @param contentPattern A string to test against each text component.
+     * @param newContent The content to replace with.
+     */
+    public MessageV2Editor replace(String contentPattern, String newContent) {
+        return replace(contentPattern, TextDisplay.of(newContent));
+    }
+
     public void apply() {
-        // MessagePartComponentReplacer replacer = new MessagePartComponentReplacer(replace);
+        MessagePartComponentReplacer replacer = new MessagePartComponentReplacer(replaceByCustomId, replaceByPattern);
         // MessageHelper.editV2ByType(channel, messageType, replacer);
     }
 }

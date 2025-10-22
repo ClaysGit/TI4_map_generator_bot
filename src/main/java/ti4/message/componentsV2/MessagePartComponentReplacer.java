@@ -7,6 +7,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import net.dv8tion.jda.api.components.Component;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.attribute.ICustomId;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.label.Label;
@@ -15,20 +16,23 @@ import net.dv8tion.jda.api.components.mediagallery.MediaGalleryItem;
 import net.dv8tion.jda.api.components.replacer.IReplaceable;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.selections.EntitySelectMenu;
+import net.dv8tion.jda.api.components.selections.SelectMenu;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
-import ti4.message.MessageHelper.TrackingComponentReplacer;
-import ti4.message.MessageV2Editor.MessagePartType;
-import ti4.message.MessageV2Editor.ReplaceMessagePart;
+import ti4.message.componentsV2.TrackingComponentReplacer;
+import ti4.message.componentsV2.MessageV2Editor.MessagePartType;
+import ti4.message.componentsV2.MessageV2Editor.ReplaceMessagePart;
 import ti4.message.logging.BotLogger;
 
 public class MessagePartComponentReplacer implements TrackingComponentReplacer {
-    private final Map<String, ReplaceMessagePart> replacements;
+    private final Map<String, ReplaceMessagePart> replaceByCustomId;
+    private final List<ReplaceMessagePart> replaceByPattern;
     private boolean madeChanges = false;
 
-    public MessagePartComponentReplacer(List<ReplaceMessagePart> replacements) {
-        this.replacements =
-                replacements.stream().collect(Collectors.toMap(ReplaceMessagePart::getReplaceKey, Function.identity()));
+    public MessagePartComponentReplacer(List<ReplaceMessagePart> replaceByCustomId, List<ReplaceMessagePart> replaceByPattern) {
+        this.replaceByCustomId =
+                replaceByCustomId.stream().collect(Collectors.toMap(ReplaceMessagePart::getReplaceKey, Function.identity()));
+        this.replaceByPattern = replaceByPattern;
     }
 
     public void startingChanges() {
@@ -57,14 +61,14 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
     public Component apply(Component curComponent) {
         ReplaceMessagePart replacement = tryGetReplacementByCustomId(curComponent);
         if (replacement == null) {
-            replacement = tryGetReplacementByString(curComponent);
+            replacement = tryGetReplacementByPattern(curComponent);
         }
         if (replacement == null && curComponent instanceof IReplaceable) {
-            Component validReplacement = getValidReplacement(curComponent);
-            if (validReplacement != curComponent) {
+            Component containerReplacement = removeIfEmptyContainer(curComponent);
+            if (containerReplacement != curComponent) {
                 madeChanges = true;
             }
-            return validReplacement;
+            return containerReplacement;
         }
         if (replacement == null) {
             return curComponent;
@@ -86,7 +90,7 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
      * @param curComponent A component that is IReplaceable
      * @return the input component if it would still be valid, otherwise null
      */
-    private Component getValidReplacement(Component curComponent) {
+    private Component removeIfEmptyContainer(Component curComponent) {
         if (curComponent == null) {
             return null;
         }
@@ -118,26 +122,24 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
         return null;
     }
 
-    private ReplaceMessagePart tryGetReplacementByString(Component curComponent) {
+    private ReplaceMessagePart tryGetReplacementByPattern(Component curComponent) {
         if (curComponent == null) {
             return null;
         }
-        for (ReplaceMessagePart replacement : replacements.values()) {
-            if (isCustomIdPartType(replacement.getType())) {
-                // This replacement is for a custom ID type; skip it.
-                continue;
-            }
+        for (ReplaceMessagePart replacement : replaceByPattern) {
             if (replacement.getType() == MessagePartType.TEXT_DISPLAY
                     && curComponent instanceof TextDisplay textDisplay) {
                 if (matchText(textDisplay, replacement.getReplaceKey())) {
                     return replacement;
                 }
-            }
-            if (replacement.getType() == MessagePartType.MEDIA_GALLERY
+            } else if (replacement.getType() == MessagePartType.MEDIA_GALLERY
                     && curComponent instanceof MediaGallery mediaGallery) {
                 if (matchText(mediaGallery, replacement.getReplaceKey())) {
                     return replacement;
                 }
+            } else {
+                throw new IllegalArgumentException("Unsupported part type for pattern matching: "
+                        + replacement.getType().name());
             }
         }
 
@@ -149,42 +151,29 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
         if (curId == null) {
             return null;
         }
-        ReplaceMessagePart replacement = replacements.getOrDefault(curId, null);
+        ReplaceMessagePart replacement = replaceByCustomId.getOrDefault(curId, null);
         if (replacement == null) {
-            return null;
-        }
-        if (!isCustomIdPartType(replacement.getType())) {
-            // Prevent accidental matches against parts that don't use custom IDs.
             return null;
         }
         return replacement;
     }
 
-    private static boolean isCustomIdPartType(MessagePartType type) {
-        return switch (type) {
-            case BUTTON, STRING_SELECT, ENTITY_SELECT -> true;
-            default -> false;
-        };
-    }
-
     private static String getCustomId(Component component) {
-        return switch (component) {
-            case Button button -> button.getCustomId();
-            case StringSelectMenu stringSelectMenu -> stringSelectMenu.getCustomId();
-            case EntitySelectMenu entitySelectMenu -> entitySelectMenu.getCustomId();
-            default -> null;
-        };
+        if(component instanceof ICustomId customIdComponent) {
+            return customIdComponent.getCustomId();
+        }
+        return null;
     }
 
-    private static boolean matchText(TextDisplay textDisplay, String startsWith) {
-        if (textDisplay == null || startsWith == null) {
+    private static boolean matchText(TextDisplay textDisplay, String pattern) {
+        if (textDisplay == null || pattern == null) {
             return false;
         }
         String content = textDisplay.getContent();
         if (content == null) {
             return false;
         }
-        return content.startsWith(startsWith);
+        return content.startsWith(pattern);
     }
 
     private static boolean matchText(MediaGallery mediaGallery, String contains) {

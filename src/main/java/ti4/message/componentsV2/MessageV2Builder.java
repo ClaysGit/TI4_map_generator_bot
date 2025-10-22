@@ -1,5 +1,6 @@
 package ti4.message.componentsV2;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -22,33 +23,38 @@ import net.dv8tion.jda.api.components.separator.Separator;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
+import net.dv8tion.jda.api.components.tree.ComponentTree;
 import net.dv8tion.jda.api.components.tree.MessageComponentTree;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import org.apache.commons.lang3.StringUtils;
+
+import ti4.helpers.Constants;
 import ti4.helpers.StringHelper;
 import ti4.message.GameMessageType;
 import ti4.message.MessageHelper;
+import ti4.message.MessageHelper.MessageFunction;
 import ti4.message.logging.BotLogger;
 
 public class MessageV2Builder {
     private final MessageChannel channel;
-    private final GameMessageType messageType;
     private final List<MessagePart> parts = new ArrayList<>();
+    private final boolean allowSplit;
 
     public MessageV2Builder(MessageChannel channel) {
         Objects.requireNonNull(channel, "Channel cannot be null");
         this.channel = channel;
-        this.messageType = null;
+        this.allowSplit = true;
     }
 
-    public MessageV2Builder(MessageChannel channel, GameMessageType messageType) {
+    public MessageV2Builder(MessageChannel channel, boolean allowSplit) {
         Objects.requireNonNull(channel, "Channel cannot be null");
         this.channel = channel;
-        this.messageType = messageType;
+        this.allowSplit = allowSplit;
     }
 
     public enum MessagePartType {
@@ -119,6 +125,16 @@ public class MessageV2Builder {
         return append(message);
     }
 
+    /**
+     * Append text that can be replaced. This means that the text component
+     * won't be combined with any other text components, so that replacements
+     * and removals are isolated to just this content.
+     * @param message The text to append
+     */
+    public MessageV2Builder appendReplaceableText(String message) {
+        return append(TextDisplay.of(message));
+    }
+
     public MessageV2Builder append(Button button) {
         parts.add(new MessagePart(button));
         return this;
@@ -134,9 +150,30 @@ public class MessageV2Builder {
         return this;
     }
 
+    public MessageV2Builder appendInlineImage(FileUpload imageFile) {
+        if (imageFile == null) {
+            return this;
+        }
+        MediaGallery mediaGallery = makeDisplayableV2Image(imageFile);
+        append(mediaGallery);
+        return this;
+    }
+
     public void send() {
         List<MessageCreateData> combinedComponents = build();
-        // MessageHelper.sendAndReplaceType(channel, combinedComponents, messageType);
+        if(combinedComponents.isEmpty()) {
+            return;
+        }
+        if(!allowSplit && combinedComponents.size() > 1) {
+            List<String> componentTrees = combinedComponents.stream()
+                    .map(msg -> MessageV2Builder.ComponentTypeTree(msg.getComponentTree()))
+                    .collect(Collectors.toList());
+            BotLogger.warning( Constants.jabberwockyPing() + "Attempted to send a v2 message that exceeds the component limit, "
+                    + "but splitting is disabled. Message not sent.\n"
+                    + String.join("\n---\n", componentTrees));
+            return;
+        }
+        MessageHelper.sendMessagesWithRetry(channel, combinedComponents, null, "Failed to send v2 message", 1);
     }
 
     private List<MessageCreateData> build() {
@@ -209,7 +246,7 @@ public class MessageV2Builder {
             int componentCount = MessageV2Builder.CountComponents(component);
             if (componentCount > Message.MAX_COMPONENT_COUNT_IN_COMPONENT_TREE) {
                 BotLogger.warning("Cannot send a message with a top-level component that exceeds the component limit.\n"
-                        + MessageV2Builder.ComponentDebugText(component));
+                        + MessageV2Builder.ComponentTypeTree(component));
                 continue;
             }
             if (currentCount + componentCount > Message.MAX_COMPONENT_COUNT_IN_COMPONENT_TREE && !currentPartition.isEmpty()) {
@@ -272,12 +309,21 @@ public class MessageV2Builder {
         };
     }
 
-    public static String ComponentDebugText(Component component) {
+    public static String ComponentTypeTree(MessageComponentTree componentTree) {
+        if (componentTree == null) {
+            return "null";
+        }
+        return componentTree.getComponents().stream()
+                .map(MessageV2Builder::ComponentTypeTree)
+                .collect(Collectors.joining(", ", "ComponentTree(", ")"));
+    }
+
+    public static String ComponentTypeTree(Component component) {
         return switch (component) {
             case ActionRow actionRow ->
                 "ActionRow("
                         + actionRow.getComponents().stream()
-                                .map(MessageV2Builder::ComponentDebugText)
+                                .map(MessageV2Builder::ComponentTypeTree)
                                 .collect(Collectors.joining(", "))
                         + ")";
             case Button button -> "Button(" + button.getLabel() + "[" + button.getCustomId() + "])";
@@ -287,7 +333,7 @@ public class MessageV2Builder {
             case Section section ->
                 "Section("
                         + section.getContentComponents().stream()
-                                .map(MessageV2Builder::ComponentDebugText)
+                                .map(MessageV2Builder::ComponentTypeTree)
                                 .collect(Collectors.joining(", "))
                         + ")";
             case TextDisplay textDisplay -> "TextDisplay";
@@ -298,11 +344,11 @@ public class MessageV2Builder {
             case Container container ->
                 "Container("
                         + container.getComponents().stream()
-                                .map(MessageV2Builder::ComponentDebugText)
+                                .map(MessageV2Builder::ComponentTypeTree)
                                 .collect(Collectors.joining(", "))
                         + ")";
             case Label label ->
-                "Label(" + (label.getChild() != null ? ComponentDebugText(label.getChild()) : "no child") + ")";
+                "Label(" + (label.getChild() != null ? ComponentTypeTree(label.getChild()) : "no child") + ")";
             case null -> "null";
             default ->
                 throw new IllegalArgumentException(

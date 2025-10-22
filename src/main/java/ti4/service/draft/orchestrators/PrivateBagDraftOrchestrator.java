@@ -2,11 +2,15 @@ package ti4.service.draft.orchestrators;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
 import lombok.Getter;
 import lombok.Setter;
 import net.dv8tion.jda.api.components.buttons.Button;
@@ -55,14 +59,69 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
     @Getter
     @Setter
     private int picksFromBags;
+    @Getter
+    @Setter
+    private int currentBagRound;
     
 
     private void cleanUnknownChoices(DraftManager draftManager) {
+        Set<String> allValidChoiceKeys = new HashSet<>();
+        for(Draftable draftable : draftManager.getDraftables()) {
+            allValidChoiceKeys.addAll(draftable.getAllDraftChoiceKeys());
+        }
 
+        for (PlayerDraftState playerState : draftManager.getPlayerStates().values()) {
+            State orchestratorState = (State) playerState.getOrchestratorState();
+            List<String> cleanedBaggedChoices = new ArrayList<>();
+            for (String choiceKey : orchestratorState.getBaggedDraftChoices()) {
+                if (allValidChoiceKeys.contains(choiceKey)) {
+                    cleanedBaggedChoices.add(choiceKey);
+                }
+            }
+            orchestratorState.getBaggedDraftChoices().clear();
+            orchestratorState.getBaggedDraftChoices().addAll(cleanedBaggedChoices);
+        }
     }
 
     private void addMissingChoices(DraftManager draftManager) {
+        // Map<DraftableType, List<String>> allChoicesByType = new HashMap<>();
+        for (Draftable draftable : draftManager.getDraftables()) {
+            // Get choices for this type
+            Set<String> draftChoices = draftable.getAllDraftChoiceKeys();
 
+            // Remove draft choices already assigned to players
+            for (PlayerDraftState playerState : draftManager.getPlayerStates().values()) {
+                State orchestratorState = (State) playerState.getOrchestratorState();
+                for (String choiceKey : orchestratorState.getBaggedDraftChoices()) {
+                    draftChoices.remove(choiceKey);
+                }
+            }
+
+            if(draftChoices.isEmpty()) {
+                continue;
+            }
+
+            // Distribute remaining choices to players with the fewest of this type
+            List<String> remainingChoices = new LinkedList<>(draftChoices);
+            while(!remainingChoices.isEmpty()) {
+                String curChoice = remainingChoices.removeFirst();
+                PlayerDraftState targetPlayer = null;
+                int fewestChoices = Integer.MAX_VALUE;
+                for(String playerUserId : draftManager.getPlayerUserIds()) {
+                    int numChoices = draftManager.getPlayerPicks(playerUserId,draftable.getType()).size();
+                    if(numChoices < fewestChoices) {
+                        fewestChoices = numChoices;
+                        targetPlayer = draftManager.getPlayerStates().get(playerUserId);;
+                    }
+                }
+                if(targetPlayer == null) {
+                    // Should not happen
+                    break;
+                }
+                State targetState = (State) targetPlayer.getOrchestratorState();
+                targetState.getBaggedDraftChoices().add(curChoice);
+            }
+        }
     }
 
     public void initialize(DraftManager draftManager, List<String> presetPlayerOrder, int picksFromBags, int picksFromFirstBag) {
@@ -88,6 +147,7 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
         setPicksFromFirstBag(picksFromFirstBag);
         cleanUnknownChoices(draftManager);
         addMissingChoices(draftManager);
+        currentBagRound = 1;
     }
 
     public void setDraftOrder(DraftPlayerManager draftManager, List<String> playerOrder) {
@@ -169,7 +229,15 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
 
             PlayerDraftState playerDraftState = draftManager.getPlayerStates().get(playerUserId);
             State orchestratorState = (State) playerDraftState.getOrchestratorState();
-            
+            List<String> visibleChoices = orchestratorState.getBaggedDraftChoices();
+            List<String> pendingPicks = orchestratorState.getPendingPicks();
+
+            Button submitDraftChoices = getSubmitPicksButton();
+            if(!canSubmitPicks(draftManager, playerUserId)) {
+                submitDraftChoices = submitDraftChoices.withDisabled(true);
+            }
+
+            BagDraftMessageService.sendPlayerDraftInfo(draftManager, playerUserId, visibleChoices, pendingPicks, List.of(submitDraftChoices));
         }
 
         // PublicDraftInfoService.send(
@@ -178,6 +246,14 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
         //         currentPlayerUserId,
         //         getNextPlayer(playerOrder),
         //         List.of(getReprintDraftButton()));
+    }
+
+    private boolean canSubmitPicks(DraftManager draftManager, String playerUserId) {
+        PlayerDraftState playerDraftState = draftManager.getPlayerStates().get(playerUserId);
+        State bagState = (State) playerDraftState.getOrchestratorState();
+        if(bagState.pendingPicks.size() >= bagState.)
+        int requiredPicks = (currentBagRound == 1) ? picksFromFirstBag : picksFromBags;
+        return bagState.getPendingPicks().size() >= requiredPicks && !bagState.isPicksLocked();
     }
 
     @Override
@@ -295,24 +371,33 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
         return "pbd_";
     }
 
-    private Button getReprintDraftButton() {
+    private Button getSubmitPicksButton() {
         return Buttons.gray(
-                DraftButtonService.DRAFT_BUTTON_SERVICE_PREFIX + getButtonPrefix() + "reprintdraft",
-                "Show draft again");
+                DraftButtonService.DRAFT_BUTTON_SERVICE_PREFIX + getButtonPrefix() + "lockpicks",
+                "Submit picks");
     }
 
     @Override
     public String handleCustomButtonPress(
             GenericInteractionCreateEvent event, DraftManager draftManager, String playerUserId, String buttonId) {
 
-        if (buttonId.equals("reprintdraft")) {
-            List<String> playerOrder = getDraftOrder(draftManager);
-            PublicDraftInfoService.send(
-                    draftManager,
-                    playerOrder,
-                    getCurrentPlayer(playerOrder),
-                    getNextPlayer(playerOrder),
-                    List.of(getReprintDraftButton()));
+        if (buttonId.equals("lockpicks")) {
+            PlayerDraftState playerState = draftManager.getPlayerStates().get(playerUserId);
+            State orchestratorState = (State) playerState.getOrchestratorState();
+            if (orchestratorState.isPicksLocked()) {
+                // TODO: PEBKAC
+                return "Your picks are already submitted.";
+            }
+            orchestratorState.setPicksLocked(true);
+
+            // Update draft info message
+            List<State> bagStates = getBagStates(draftManager);
+            int playersLockedPicks = bagStates.stream().filter(State::isPicksLocked).toList().size();
+            updateRoundInfo(currentBagRound, playersLockedPicks, draftManager.getPlayerStates().size(), draftManager.getGame());
+
+            // If that's the last player, advance the bag draft
+            tryAdvanceBagDraft(draftManager);
+
             return null;
         }
 
@@ -375,5 +460,154 @@ public class PrivateBagDraftOrchestrator extends DraftOrchestrator {
             }
         }
         return playerOrder;
+    }
+
+    private List<State> getBagStates(DraftManager draftManager) {
+        List<State> bagStates = new ArrayList<>();
+        List<String> playerOrder = getDraftOrder(draftManager);
+        for (String playerUserId : playerOrder) {
+            PlayerDraftState playerState = draftManager.getPlayerStates().get(playerUserId);
+            State orchestratorState = (State) playerState.getOrchestratorState();
+            bagStates.add(orchestratorState);
+        }
+        return bagStates;
+    }
+
+    private void tryAdvanceBagDraft(DraftManager draftManager) {
+        // Check if all players have locked their picks,
+        // or are otherwise unable to make more picks.
+        for(String playerUserId : draftManager.getPlayerUserIds()) {
+            State bagState = (State) draftManager.getPlayerStates().get(playerUserId).getOrchestratorState();
+
+            // Check if picks are locked
+            if(bagState.isPicksLocked()) {
+                continue;
+            }
+
+            // Check if picks are possible
+            List<String> legalPicks = getPlayerLegalPicks(draftManager, playerUserId);
+            if(legalPicks.isEmpty()) {
+                bagState.setPicksLocked(true);
+                continue;
+            }
+
+            // If picks aren't locked and there are legal choices left, this round is unfinished.
+            return;
+        }
+
+        advanceBagDraft(draftManager);
+    }
+
+    private void advanceBagDraft(DraftManager draftManager) {
+        Map<String, DraftChoice> allDraftChoices = draftManager.getDraftables().stream()
+                .flatMap(draftable -> draftable.getAllDraftChoices().stream())
+                .collect(Collectors.toMap(DraftChoice::getChoiceKey, dc -> dc));
+
+        applyAndClearPendingPicks(draftManager, allDraftChoices);
+
+        // Get the bags in order
+        List<String> playerOrder = getDraftOrder(draftManager);
+
+        // Pass bags to the next player, and lock in any required picks. If no players have
+        // legal choices, but there are still unpicked items, advance the bags again.
+        for(int passNumber = 0; passNumber < playerOrder.size(); passNumber++) {
+            List<String> choicesForNextBag = null;
+            for(int i = playerOrder.size() - 1; i >= 0; i--) {
+                String fromPlayerUserId = playerOrder.get(i);
+                int nextPlayerIndex = (i + 1) % playerOrder.size();
+                String toPlayerUserId = playerOrder.get(nextPlayerIndex);
+
+                PlayerDraftState fromPlayerState = draftManager.getPlayerStates().get(fromPlayerUserId);
+                State fromBagState = (State) fromPlayerState.getOrchestratorState();
+
+                PlayerDraftState toPlayerState = draftManager.getPlayerStates().get(toPlayerUserId);
+                State toBagState = (State) toPlayerState.getOrchestratorState();
+
+                // Pass the bag
+                if(choicesForNextBag == null) {
+                    choicesForNextBag = new ArrayList<>(toBagState.getBaggedDraftChoices());
+                }
+                toBagState.getBaggedDraftChoices().clear();
+                toBagState.getBaggedDraftChoices().addAll(fromBagState.getBaggedDraftChoices());
+                fromBagState.getBaggedDraftChoices().clear();
+            }
+        }
+
+        // Then try to end the draft.
+    }
+
+    private void applyAndClearPendingPicks(DraftManager draftManager, Map<String, DraftChoice> allDraftChoices) {
+        for(String playerUserId : draftManager.getPlayerUserIds()) {
+            PlayerDraftState playerState = draftManager.getPlayerStates().get(playerUserId);
+            State bagState = (State) playerState.getOrchestratorState();
+
+            // Apply picks
+            for(String choiceKey : bagState.getPendingPicks()) {
+                DraftChoice draftChoice = allDraftChoices.get(choiceKey);
+                playerState.getPicks().putIfAbsent(draftChoice.getType(), new ArrayList<>());
+                playerState.getPicks().get(draftChoice.getType()).add(draftChoice);
+            }
+
+            // Clear player state
+            bagState.getPendingPicks().clear();
+            bagState.setPicksLocked(false);
+        }
+    }
+
+    private List<String> getPlayerLegalPicks(DraftManager draftManager, String playerUserId) {
+        PlayerDraftState playerState = draftManager.getPlayerStates().get(playerUserId);
+        State bagState = (State) playerState.getOrchestratorState();
+        Set<String> baggedDraftChoices = bagState.getBaggedDraftChoices().stream().collect(Collectors.toSet());
+        List<String> legalPicks = new ArrayList<>();
+        // A pick is illegal if:
+        // - It's not in the current bag
+        // - It's been picked
+        // - It's already pending in any bag (hopefully not in another player's, but cover it anyway)
+        // - The draftable itself rejects the player's ability to pick it (pick limit, pick conflict, etc.)
+        for(Draftable draftable : draftManager.getDraftables()) {
+            List<DraftChoice> draftChoices = draftable.getAllDraftChoices();
+            for(DraftChoice draftChoice : draftChoices) {
+                String choiceKey = draftChoice.getChoiceKey();
+                if(!baggedDraftChoices.contains(choiceKey)) {
+                    continue;
+                }
+                if(draftManager.getPlayersWithChoiceKey(draftable.getType(), choiceKey).size() > 0) {
+                    continue;
+                }
+                if(bagState.pendingPicks.contains(choiceKey)) {
+                    continue;
+                }
+                if(draftable.isValidDraftChoice(draftManager, playerUserId, draftChoice) != null) {
+                    continue;
+                }
+                // If we reach this point, the pick is legal
+                legalPicks.add(choiceKey);
+            }
+        }
+        return legalPicks;
+    }
+
+    private void sendRoundInfo(int roundNumber, int playersLockedPicks, int totalPlayers, Game game) {
+        MessageHelper.sendMessageToChannel(game.getMainGameChannel(), getRoundInfoPrefix(roundNumber)
+                + "Players submitted picks: " + playersLockedPicks + "/" + totalPlayers);
+    }
+
+    private String getRoundInfoPrefix(int roundNumber) {
+        return "Bag Draft - Round " + roundNumber + ": ";
+    }
+
+    private void updateRoundInfo(int roundNumber, int playersLockedPicks, int totalPlayers, Game game) {
+        game.getMainGameChannel().getHistory().retrievePast(10).queue(messageHistory -> {
+            for (var message : messageHistory) {
+                if (message.getAuthor().isBot()
+                        && message.getContentRaw().startsWith(getRoundInfoPrefix(roundNumber))) {
+                    message.editMessage(getRoundInfoPrefix(roundNumber)
+                            + "Players submitted picks: " + playersLockedPicks + "/" + totalPlayers).queue();
+                    return;
+                }
+            }
+            // No existing message found, send a new one
+            sendRoundInfo(roundNumber, playersLockedPicks, totalPlayers, game);
+        });
     }
 }

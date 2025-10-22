@@ -575,16 +575,8 @@ public class MessageHelper {
 
         String finalMessageText = messageText;
         List<MessageCreateData> objects = getMessageCreateDataObjects(finalMessageText, sanitizedEmbeds, buttons);
-        Iterator<MessageCreateData> iterator = objects.iterator();
-        while (iterator.hasNext()) {
-            MessageCreateData messageCreateData = iterator.next();
-            if (iterator.hasNext()) { // not last message
-                sendMessageWithRetry(channel, messageCreateData, null, "Failed to send intermediate message", 1);
-            } else { // last message, do action
-                sendMessageWithRetry(
-                        channel,
-                        messageCreateData,
-                        message -> {
+        sendMessagesWithRetry(
+                channel, objects, message -> {
                             ManagedGame managedGame = GameManager.getManagedGame(gameName);
                             if (finalMessageText != null && managedGame != null && !managedGame.isFowMode()) {
                                 if (finalMessageText.contains("Use buttons to do your turn")
@@ -603,9 +595,23 @@ public class MessageHelper {
                             if (restAction != null) {
                                 restAction.run(message);
                             }
-                        },
-                        finalMessageText,
-                        1);
+                        }, finalMessageText, 1);
+    }
+
+    public static void sendMessagesWithRetry(
+            MessageChannel channel,
+            List<MessageCreateData> messageCreateDataList,
+            MessageFunction successAction,
+            String errorHeader,
+            int remainingAttempts) {
+        Iterator<MessageCreateData> iterator = messageCreateDataList.iterator();
+        while (iterator.hasNext()) {
+            MessageCreateData messageCreateData = iterator.next();
+            if (iterator.hasNext()) { // not last message
+                sendMessageWithRetry(channel, messageCreateData, null, "Failed to send intermediate message", remainingAttempts);
+            } else { // last message, do action
+                sendMessageWithRetry(
+                        channel, messageCreateData, successAction, errorHeader, remainingAttempts);
             }
         }
     }
@@ -1045,7 +1051,7 @@ public class MessageHelper {
         sendMessageToChannelWithEmbeds(channel, message, embeds);
     }
 
-    private static List<Button> sanitizeButtons(List<Button> buttons, MessageChannel channel) {
+    public static List<Button> sanitizeButtons(List<Button> buttons, MessageChannel channel) {
         if (buttons == null) return null;
         List<Button> newButtons = new ArrayList<>();
         List<String> goodButtonIDs = new ArrayList<>();
