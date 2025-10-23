@@ -2271,7 +2271,7 @@ class PlayerAreaGenerator {
 
     private int breakthroughInfo(Player player, int x, int y, Game game) {
         BreakthroughModel bt = player.getBreakthroughModel();
-        if (bt == null) return x;
+        if (bt == null || !game.isThundersEdge()) return x;
         String name = bt.getDisplayName() == null ? bt.getName() : bt.getDisplayName();
         String faction = bt.getFaction().orElse(null);
         boolean exh = player.isBreakthroughExhausted();
@@ -2829,6 +2829,7 @@ class PlayerAreaGenerator {
                         || unit.getUpgradesToUnitId().isPresent();
                 boolean corsair = unit.getAlias().equals("mentak_cruiser3");
                 if (game.isFrankenGame()
+                        || game.isTwilightsFallMode()
                         || corsair
                         || unitHasUpgrade
                         || "echoes".equals(player.getFactionModel().getAlias())) {

@@ -42,6 +42,7 @@ import ti4.service.emoji.CardEmojis;
 import ti4.service.emoji.MiscEmojis;
 import ti4.service.emoji.TI4Emoji;
 import ti4.service.emoji.UnitEmojis;
+import ti4.service.fow.BlindSelectionService;
 import ti4.service.fow.RiftSetModeService;
 import ti4.service.franken.FrankenLeaderService;
 import ti4.service.leader.PlayHeroService;
@@ -1245,7 +1246,7 @@ public class ButtonHelperHeroes {
     public static void resolveNekroHeroStep2(Player player, Game game, ButtonInteractionEvent event, String buttonID) {
         String planet = buttonID.split("_")[1];
         Planet unitHolder = game.getPlanetsInfo().get(planet);
-        Set<String> techTypes = unitHolder.getTechSpecialities();
+        List<String> techTypes = unitHolder.getTechSpecialities();
         if (techTypes.isEmpty()) {
             MessageHelper.sendMessageToChannel(player.getCorrectChannel(), "No technology specialties found.");
             return;
@@ -2282,6 +2283,7 @@ public class ButtonHelperHeroes {
                 }
             }
         }
+        BlindSelectionService.filterForBlindPositionSelection(game, player, buttons, finChecker + "benedictionStep1");
         return buttons;
     }
 

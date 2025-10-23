@@ -316,6 +316,10 @@ public class AutoCompleteProvider {
                         .filter(unit -> (unit.getId() + " " + unit.getName())
                                 .toLowerCase()
                                 .contains(enteredValue))
+                        .filter(model -> model.getSource() != ComponentSource.miltymod
+                                && model.getSource() != ComponentSource.project_pi
+                                && model.getSource() != ComponentSource.twilights_fall
+                                && model.getSource() != ComponentSource.asteroid)
                         .limit(25)
                         .map(unit -> new Command.Choice(unit.getId() + " (" + unit.getName() + ")", unit.getId()))
                         .collect(Collectors.toList());
@@ -632,7 +636,9 @@ public class AutoCompleteProvider {
             }
             case Constants.DRAFT_MODE -> {
                 String enteredValue = event.getFocusedOption().getValue();
-                List<FrankenDraftMode> modes = Arrays.asList(FrankenDraftMode.values());
+                List<FrankenDraftMode> modes = new ArrayList<>();
+                modes.addAll(Arrays.asList(FrankenDraftMode.values()));
+                modes.remove(FrankenDraftMode.TWILIGHTSFALL);
                 List<Command.Choice> options = modes.stream()
                         .filter(mode -> mode.search(enteredValue))
                         .limit(25)
@@ -1173,6 +1179,33 @@ public class AutoCompleteProvider {
                 int playerCount = draftManager.getPlayerStates().size();
                 int maxSeats = Math.min(playerCount, 8);
                 event.replyChoice(maxSeats + " speaker order positions", maxSeats)
+                        .queue();
+            }
+            case Constants.PLAYER_PICKS_OPTION -> {
+                if (!GameManager.isValid(gameName)) return;
+                Game game = GameManager.getManagedGame(gameName).getGame();
+                if (!DraftManager.hasDraftManager(game)) return;
+                DraftManager draftManager = game.getDraftManager();
+
+                String draftableTypeStr =
+                        event.getOption(Constants.DRAFTABLE_TYPE_OPTION, null, OptionMapping::getAsString);
+                if (draftableTypeStr == null) return;
+
+                DraftableType draftableType = DraftableType.of(draftableTypeStr);
+                // Verify type is in draft
+                Draftable draftable = draftManager.getDraftable(draftableType);
+                if (draftable == null) return;
+
+                String enteredValue = event.getFocusedOption().getValue().toLowerCase();
+
+                List<DraftChoice> allPicks = draftManager.getAllPicksOfType(draftableType);
+                event.replyChoices(allPicks.stream()
+                                .filter(option -> option.getUnformattedName()
+                                        .toLowerCase()
+                                        .contains(enteredValue))
+                                .limit(25)
+                                .map(option -> new Command.Choice(option.getUnformattedName(), option.getChoiceKey()))
+                                .collect(Collectors.toList()))
                         .queue();
             }
         }
