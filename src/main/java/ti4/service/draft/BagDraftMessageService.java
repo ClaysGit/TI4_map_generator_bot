@@ -1,5 +1,6 @@
 package ti4.service.draft;
 
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -7,23 +8,36 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.MessageTopLevelComponent;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.container.Container;
 import net.dv8tion.jda.api.components.section.Section;
+import net.dv8tion.jda.api.components.separator.Separator;
+import net.dv8tion.jda.api.components.separator.Separator.Spacing;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
 import ti4.buttons.Buttons;
+import ti4.image.Mapper;
+import ti4.image.TileHelper;
 import ti4.map.Game;
 import ti4.map.Player;
+import ti4.message.MessageHelper;
 import ti4.message.componentsV2.MessageV2Builder;
 import ti4.message.componentsV2.MessageV2Editor;
 import ti4.message.logging.BotLogger;
 import ti4.message.logging.LogOrigin;
+import ti4.model.ColorModel;
+import ti4.model.FactionModel;
+import ti4.model.TileModel;
+import ti4.model.TileModel.TileBack;
+import ti4.service.draft.draftables.FactionDraftable;
+import ti4.service.draft.draftables.MantisTileDraftable;
 
 @UtilityClass
 public class BagDraftMessageService {
-    private static final String PICK_SUMMARY_START = "### Pending Picks";
+    private static final String PICK_SUMMARY_START = "## Pending Picks";
     private static final Integer MAX_MESSAGE_SPLITS = 15;
 
     public record DraftChoiceInfo(
@@ -76,6 +90,8 @@ public class BagDraftMessageService {
             // MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, draftableHeader, buttons);
         }
 
+        builder.append(Separator.createDivider(Spacing.LARGE));
+
         String pendingPickSummary = getPendingPickSummary(draftManager, draftChoices);
         builder.appendReplaceableText(pendingPickSummary);
         if (extraButtons != null && !extraButtons.isEmpty()) {
@@ -85,6 +101,8 @@ public class BagDraftMessageService {
         // builder.append(getSubmitPicksButton(canSubmitPicks));
         // MessageHelper.sendMessageToChannel(channel, pendingPickSummary);
 
+        MessageHelper.sendMessageToChannel(
+                channel, player.getRepresentation() + " use this thread to make draft picks in secret.");
         builder.send();
     }
 
@@ -120,8 +138,11 @@ public class BagDraftMessageService {
             return;
         }
 
-        MessageChannel channel = BagChannelService.regenerateBagChannel(game, player);
-        if (channel == null) return;
+        MessageChannel channel = BagChannelService.findExistingBagChannel(game, player);
+        if (channel == null) {
+            sendPlayerDraftInfo(draftManager, playerUserId, draftChoices, extraButtons);
+            return;
+        }
 
         MessageV2Editor editor = new MessageV2Editor();
 
@@ -139,7 +160,7 @@ public class BagDraftMessageService {
         }
 
         String pendingPickSummary = getPendingPickSummary(draftManager, draftChoices);
-        editor.replace("^" + PICK_SUMMARY_START, pendingPickSummary);
+        editor.replace("^" + PICK_SUMMARY_START + "[\\s\\S]*$", pendingPickSummary);
 
         for (Draftable d : draftManager.getDraftables()) {
             List<Button> buttons = new ArrayList<>(getDraftButtons(draftManager, d, draftChoices));
@@ -199,6 +220,7 @@ public class BagDraftMessageService {
                 .collect(HashMap::new, (m, info) -> m.put(info.draftChoice.getChoiceKey(), info), Map::putAll);
 
         List<DraftChoice> allDraftChoices = draftable.getAllDraftChoices();
+        boolean first = true;
         for (DraftChoice choice : allDraftChoices) {
             if (!choiceInfoByKey.containsKey(choice.getChoiceKey())) {
                 // Assumed not visible/legal
@@ -228,8 +250,38 @@ public class BagDraftMessageService {
             choiceText.append("**").append(choice.getUnformattedName()).append("**");
             choiceText.append(System.lineSeparator()).append("> ").append(choice.getFormattedName());
 
-            Section pickSection = Section.of(pickButton, TextDisplay.of(choiceText.toString()));
-            components.add(pickSection);
+            // Section pickSection = Section.of(pickButton, TextDisplay.of(choiceText.toString()));
+            // if (!first) {
+            //     components.add(Separator.createInvisible(Spacing.SMALL));
+            // } else {
+            //     first = false;
+            // }
+            Container pContainer = Container.of(TextDisplay.of(choiceText.toString()), ActionRow.of(pickButton));
+
+            if(choice.getType().equals(MantisTileDraftable.TYPE)) {
+                String tileId = MantisTileDraftable.getItemId(choice.getChoiceKey());
+                TileModel tile = TileHelper.getTileById(tileId);
+                if(tile != null) {
+                    if(tile.getTileBack().equals(TileBack.BLUE)) {
+                        pContainer = pContainer.withAccentColor(Color.BLUE);
+                    } else if(tile.getTileBack().equals(TileBack.RED)) {
+                        pContainer = pContainer.withAccentColor(Color.RED);
+                    }
+                }
+            } else if(choice.getType().equals(FactionDraftable.TYPE)) {
+                FactionModel faction = Mapper.getFaction(choice.getChoiceKey());
+                if(faction != null) {
+                    List<String> preferredColors = faction.getPreferredColours();
+                    if(preferredColors != null && !preferredColors.isEmpty()) {
+                        ColorModel color = Mapper.getColor(preferredColors.get(0));
+                        if(color != null) {
+                            pContainer = pContainer.withAccentColor(color.getPrimaryColor());
+                        }
+                    }
+                }
+            }
+
+            components.add(pContainer);
         }
 
         return components;
@@ -263,7 +315,7 @@ public class BagDraftMessageService {
         } else if (info.isLegalToPick) {
             pickButton = Buttons.green(buttonCustomId, "Pick");
         } else {
-            pickButton = Buttons.gray(buttonCustomId, "Unavailable").withDisabled(true);
+            pickButton = Buttons.gray(buttonCustomId, "Already Picked").withDisabled(true);
         }
 
         return pickButton;
@@ -355,6 +407,6 @@ public class BagDraftMessageService {
     }
 
     private static String getSectionHeader(String displayName) {
-        return "__**" + displayName.toUpperCase() + ":**__";
+        return "## " + displayName.toUpperCase() + ":";
     }
 }

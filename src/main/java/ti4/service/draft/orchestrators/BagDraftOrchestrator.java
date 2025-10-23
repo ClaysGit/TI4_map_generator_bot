@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.Setter;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.buttons.ButtonStyle;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import ti4.buttons.Buttons;
@@ -126,7 +127,7 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
 
             Button submitDraftChoices = getSubmitPicksButton();
             if (!canSubmitPicks(draftManager, playerUserId)) {
-                submitDraftChoices = submitDraftChoices.withDisabled(true);
+                    submitDraftChoices.withStyle(ButtonStyle.SECONDARY).withDisabled(true);
             }
 
             BagDraftMessageService.sendPlayerDraftInfo(
@@ -159,14 +160,19 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
             return "Error: Your draft state is invalid.";
         }
 
-        // Persist the choice in Player State, as a pending choice until it's locked.
-        orchestratorState.getPendingPicks().add(choice.getChoiceKey());
+        if (orchestratorState.getPendingPicks().contains(choice.getChoiceKey())) {
+            orchestratorState.getPendingPicks().remove(choice.getChoiceKey());
+        } else {
+            // Persist the choice in Player State, as a pending choice until it's locked.
+            orchestratorState.getPendingPicks().add(choice.getChoiceKey());
+        }
 
         List<DraftChoiceInfo> draftChoiceInfos = getDraftChoiceInfosForPlayer(draftManager, playerUserId);
 
         Button submitDraftChoices = getSubmitPicksButton();
         if (!canSubmitPicks(draftManager, playerUserId)) {
-            submitDraftChoices = submitDraftChoices.withDisabled(true);
+            submitDraftChoices =
+                    submitDraftChoices.withStyle(ButtonStyle.SECONDARY).withDisabled(true);
         }
 
         BagDraftMessageService.editPlayerDraftInfo(
@@ -186,7 +192,7 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
 
     @Override
     public void load(String data) {
-        String[] tokens = data.split(DraftOrchestrator.SAVE_SEPARATOR, 3);
+        String[] tokens = data.split(SAVE_SEPARATOR, 3);
         if (tokens.length != 3) {
             throw new IllegalArgumentException("Invalid data for PrivateBagDraftOrchestrator: " + data);
         }
@@ -203,12 +209,12 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
         }
         State pbdState = (State) state;
         StringBuilder sb = new StringBuilder();
-        sb.append("o").append(pbdState.getOrderIndex()).append(DraftSaveService.DATA_SEPARATOR);
+        sb.append("o").append(pbdState.getOrderIndex()).append(SAVE_SEPARATOR);
         for (String choiceKey : pbdState.getBaggedDraftChoices()) {
-            sb.append("b").append(choiceKey).append(DraftSaveService.DATA_SEPARATOR);
+            sb.append("b").append(choiceKey).append(SAVE_SEPARATOR);
         }
         for (String choiceKey : pbdState.getPendingPicks()) {
-            sb.append("p").append(choiceKey).append(DraftSaveService.DATA_SEPARATOR);
+            sb.append("p").append(choiceKey).append(SAVE_SEPARATOR);
         }
         sb.append("l").append(pbdState.isPicksLocked() ? "1" : "0");
         return sb.toString();
@@ -216,7 +222,7 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
 
     @Override
     public OrchestratorState loadPlayerState(String data) {
-        String[] tokens = data.split(DraftSaveService.DATA_SEPARATOR);
+        String[] tokens = data.split(SAVE_SEPARATOR);
         State state = new State();
         for (String token : tokens) {
             if (token.isEmpty()) {
@@ -319,7 +325,7 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
     }
 
     private Button getSubmitPicksButton() {
-        return Buttons.gray(
+        return Buttons.green(
                 DraftButtonService.DRAFT_BUTTON_SERVICE_PREFIX + getButtonPrefix() + "lockpicks", "Submit picks");
     }
 
@@ -509,23 +515,22 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
             List<String> remainingChoices = new LinkedList<>(draftChoices);
             while (!remainingChoices.isEmpty()) {
                 String curChoice = remainingChoices.removeFirst();
-                PlayerDraftState targetPlayer = null;
+                State targetState = null;
                 int fewestChoices = Integer.MAX_VALUE;
                 for (String playerUserId : draftManager.getPlayerUserIds()) {
-                    int numChoices = draftManager
-                            .getPlayerPicks(playerUserId, draftable.getType())
-                            .size();
+                    PlayerDraftState playerState =
+                            draftManager.getPlayerStates().get(playerUserId);
+                    State currentState = (State) playerState.getOrchestratorState();
+                    int numChoices = currentState.getBaggedDraftChoices().size();
                     if (numChoices < fewestChoices) {
                         fewestChoices = numChoices;
-                        targetPlayer = draftManager.getPlayerStates().get(playerUserId);
-                        ;
+                        targetState = currentState;
                     }
                 }
-                if (targetPlayer == null) {
+                if (targetState == null) {
                     // Should not happen
                     break;
                 }
-                State targetState = (State) targetPlayer.getOrchestratorState();
                 targetState.getBaggedDraftChoices().add(curChoice);
             }
         }
@@ -612,7 +617,8 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
                 continue;
             }
 
-            // If picks aren't locked and there are legal choices left, this round is unfinished.
+            // If picks aren't locked and there are legal choices left, this round is
+            // unfinished.
             return;
         }
 
@@ -629,7 +635,8 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
         // Get the bags in order
         List<String> playerOrder = getDraftOrder(draftManager);
 
-        // Pass bags to the next player, and lock in any required picks. If no players have
+        // Pass bags to the next player, and lock in any required picks. If no players
+        // have
         // legal choices, but there are still unpicked items, advance the bags again.
         for (int passNumber = 0; passNumber < playerOrder.size(); passNumber++) {
             List<String> choicesForNextBag = null;
@@ -685,14 +692,18 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
         // A pick is illegal if:
         // - It's not in the current bag
         // - It's been picked
-        // - It's already pending in any bag (hopefully not in another player's, but cover it anyway)
-        // - Another pick of the same type is already pending in this bag (TODO: improve this?)
-        // - The draftable itself rejects the player's ability to pick it (pick limit, pick conflict, etc.)
+        // - It's already pending in any bag (hopefully not in another player's, but
+        // cover it anyway)
+        // - Another pick of the same type is already pending in this bag (TODO: improve
+        // this?)
+        // - The draftable itself rejects the player's ability to pick it (pick limit,
+        // pick conflict, etc.)
         for (Draftable draftable : draftManager.getDraftables()) {
             List<DraftChoice> draftChoices = draftable.getAllDraftChoices();
 
             // If any of this draftable's choices are pending picks, then
-            // all choices of this type are illegal (only 1 pick of a type allowed at a time)
+            // all choices of this type are illegal (only 1 pick of a type allowed at a
+            // time)
             // TODO: Handle pick legality w/ your pending picks in a smarter way
             boolean hasPendingPickOfThisType = false;
             for (DraftChoice choiceKey : draftChoices) {

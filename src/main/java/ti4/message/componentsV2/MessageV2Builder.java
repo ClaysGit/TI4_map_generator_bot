@@ -121,7 +121,7 @@ public class MessageV2Builder {
     }
 
     public MessageV2Builder appendLine(String message) {
-        if (parts.getLast().getType() == MessagePartType.TEXT) {
+        if (!parts.isEmpty() && parts.getLast().getType() == MessagePartType.TEXT) {
             parts.add(new MessagePart(System.lineSeparator()));
         }
         return append(message);
@@ -292,7 +292,7 @@ public class MessageV2Builder {
                 section.getContentComponents().stream()
                                 .mapToInt(MessageV2Builder::CountComponents)
                                 .sum()
-                        + (section.getAccessory() != null ? 1 : 0)
+                        + CountComponents(section.getAccessory())
                         + 1;
             case TextDisplay textDisplay -> 1;
             case Thumbnail thumbnail -> 1;
@@ -304,7 +304,7 @@ public class MessageV2Builder {
                                 .mapToInt(MessageV2Builder::CountComponents)
                                 .sum()
                         + 1;
-            case Label label -> label.getChild() != null ? 1 + CountComponents(label.getChild()) : 1;
+            case Label label -> 1 + CountComponents(label.getChild());
             case null -> 0;
             default ->
                 throw new IllegalArgumentException(

@@ -133,9 +133,6 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
                 if (matchText(mediaGallery, replacement.getReplaceKey())) {
                     return replacement;
                 }
-            } else {
-                throw new IllegalArgumentException("Unsupported part type for pattern matching: "
-                        + replacement.getType().name());
             }
         }
 
@@ -169,7 +166,7 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
         if (content == null) {
             return false;
         }
-        return content.startsWith(pattern);
+        return content.matches(pattern);
     }
 
     private static boolean matchText(MediaGallery mediaGallery, String contains) {
