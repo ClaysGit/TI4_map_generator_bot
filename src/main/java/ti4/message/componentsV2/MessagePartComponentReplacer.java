@@ -24,9 +24,10 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
     private final List<ReplaceMessagePart> replaceByPattern;
     private boolean madeChanges = false;
 
-    public MessagePartComponentReplacer(List<ReplaceMessagePart> replaceByCustomId, List<ReplaceMessagePart> replaceByPattern) {
-        this.replaceByCustomId =
-                replaceByCustomId.stream().collect(Collectors.toMap(ReplaceMessagePart::getReplaceKey, Function.identity()));
+    public MessagePartComponentReplacer(
+            List<ReplaceMessagePart> replaceByCustomId, List<ReplaceMessagePart> replaceByPattern) {
+        this.replaceByCustomId = replaceByCustomId.stream()
+                .collect(Collectors.toMap(ReplaceMessagePart::getReplaceKey, Function.identity()));
         this.replaceByPattern = replaceByPattern;
     }
 
@@ -154,7 +155,7 @@ public class MessagePartComponentReplacer implements TrackingComponentReplacer {
     }
 
     private static String getCustomId(Component component) {
-        if(component instanceof ICustomId customIdComponent) {
+        if (component instanceof ICustomId customIdComponent) {
             return customIdComponent.getCustomId();
         }
         return null;

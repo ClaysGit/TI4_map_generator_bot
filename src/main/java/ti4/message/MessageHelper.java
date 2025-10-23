@@ -576,26 +576,26 @@ public class MessageHelper {
         String finalMessageText = messageText;
         List<MessageCreateData> objects = getMessageCreateDataObjects(finalMessageText, sanitizedEmbeds, buttons);
         sendMessagesWithRetry(
-                channel, objects, message -> {
-                            ManagedGame managedGame = GameManager.getManagedGame(gameName);
-                            if (finalMessageText != null && managedGame != null && !managedGame.isFowMode()) {
-                                if (finalMessageText.contains("Use buttons to do your turn")
-                                        || finalMessageText.contains("Use buttons to end turn")) {
-                                    String old = GameMessageManager.replace(
-                                            gameName,
-                                            message.getId(),
-                                            GameMessageType.TURN,
-                                            managedGame.getLastModifiedDate());
-                                    if (old != null)
-                                        channel.deleteMessageById(old)
-                                                .queue(Consumers.nop(), BotLogger::catchRestError);
-                                }
-                            }
+                channel,
+                objects,
+                message -> {
+                    ManagedGame managedGame = GameManager.getManagedGame(gameName);
+                    if (finalMessageText != null && managedGame != null && !managedGame.isFowMode()) {
+                        if (finalMessageText.contains("Use buttons to do your turn")
+                                || finalMessageText.contains("Use buttons to end turn")) {
+                            String old = GameMessageManager.replace(
+                                    gameName, message.getId(), GameMessageType.TURN, managedGame.getLastModifiedDate());
+                            if (old != null)
+                                channel.deleteMessageById(old).queue(Consumers.nop(), BotLogger::catchRestError);
+                        }
+                    }
 
-                            if (restAction != null) {
-                                restAction.run(message);
-                            }
-                        }, finalMessageText, 1);
+                    if (restAction != null) {
+                        restAction.run(message);
+                    }
+                },
+                finalMessageText,
+                1);
     }
 
     public static void sendMessagesWithRetry(
@@ -608,10 +608,10 @@ public class MessageHelper {
         while (iterator.hasNext()) {
             MessageCreateData messageCreateData = iterator.next();
             if (iterator.hasNext()) { // not last message
-                sendMessageWithRetry(channel, messageCreateData, null, "Failed to send intermediate message", remainingAttempts);
-            } else { // last message, do action
                 sendMessageWithRetry(
-                        channel, messageCreateData, successAction, errorHeader, remainingAttempts);
+                        channel, messageCreateData, null, "Failed to send intermediate message", remainingAttempts);
+            } else { // last message, do action
+                sendMessageWithRetry(channel, messageCreateData, successAction, errorHeader, remainingAttempts);
             }
         }
     }

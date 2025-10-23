@@ -2,7 +2,6 @@ package ti4.service.draft;
 
 import java.util.List;
 import java.util.regex.Pattern;
-
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
@@ -68,9 +67,9 @@ public class BagChannelService {
         if (isPrivateChannel) {
             threadAction = threadAction.setInvitable(false);
         }
-        ThreadChannel threadChannel = threadAction
-                .complete(); // Must `complete` if we're using this channel as part of an interaction that
-                             // saves
+        ThreadChannel threadChannel =
+                threadAction.complete(); // Must `complete` if we're using this channel as part of an interaction that
+        // saves
         // the
         // game
         player.setBagInfoThreadID(threadChannel.getId());
@@ -96,8 +95,7 @@ public class BagChannelService {
                 List<ThreadChannel> threadChannels = actionsChannel.getThreadChannels();
 
                 ThreadChannel threadChannel = JdaService.jda.getThreadChannelById(bagInfoThread);
-                if (threadChannel != null)
-                    return threadChannel;
+                if (threadChannel != null) return threadChannel;
 
                 // SEARCH FOR EXISTING OPEN THREAD
                 for (ThreadChannel threadChannel_ : threadChannels) {
@@ -110,8 +108,8 @@ public class BagChannelService {
                 // SEARCH FOR EXISTING CLOSED/ARCHIVED THREAD
                 // Must `complete` if we're using this channel as part of an interaction that
                 // saves the game
-                List<ThreadChannel> hiddenThreadChannels = actionsChannel.retrieveArchivedPrivateThreadChannels()
-                        .complete();
+                List<ThreadChannel> hiddenThreadChannels =
+                        actionsChannel.retrieveArchivedPrivateThreadChannels().complete();
                 for (ThreadChannel threadChannel_ : hiddenThreadChannels) {
                     if (threadChannel_.getId().equals(bagInfoThread)) {
                         player.setBagInfoThreadID(threadChannel_.getId());
@@ -133,8 +131,7 @@ public class BagChannelService {
                 List<ThreadChannel> threadChannels = actionsChannel.getThreadChannels();
 
                 ThreadChannel threadChannel = JdaService.jda.getThreadChannelById(bagInfoThread);
-                if (threadChannel != null)
-                    return threadChannel;
+                if (threadChannel != null) return threadChannel;
 
                 // SEARCH FOR EXISTING OPEN THREAD
                 for (ThreadChannel threadChannel_ : threadChannels) {
@@ -147,8 +144,8 @@ public class BagChannelService {
                 // SEARCH FOR EXISTING CLOSED/ARCHIVED THREAD
                 // Must `complete` if we're using this channel as part of an interaction that
                 // saves the game
-                List<ThreadChannel> hiddenThreadChannels = actionsChannel.retrieveArchivedPrivateThreadChannels()
-                        .complete();
+                List<ThreadChannel> hiddenThreadChannels =
+                        actionsChannel.retrieveArchivedPrivateThreadChannels().complete();
                 for (ThreadChannel threadChannel_ : hiddenThreadChannels) {
                     if (threadChannel_.getName().equals(threadName)) {
                         player.setBagInfoThreadID(threadChannel_.getId());

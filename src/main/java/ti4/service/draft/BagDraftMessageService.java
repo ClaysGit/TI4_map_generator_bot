@@ -2,53 +2,32 @@ package ti4.service.draft;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.regex.Pattern;
-
 import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.MessageTopLevelComponent;
-import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
-import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.Message.Attachment;
-import net.dv8tion.jda.api.entities.MessageHistory;
-import net.dv8tion.jda.api.entities.MessageHistory.MessageRetrieveAction;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
-import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.commons.lang3.function.Consumers;
-
 import ti4.buttons.Buttons;
-import ti4.helpers.Helper;
 import ti4.map.Game;
 import ti4.map.Player;
-import ti4.message.MessageHelper;
-import ti4.message.MessageHelper.MessageFunction;
 import ti4.message.componentsV2.MessageV2Builder;
 import ti4.message.componentsV2.MessageV2Editor;
 import ti4.message.logging.BotLogger;
 import ti4.message.logging.LogOrigin;
-import ti4.spring.jda.JdaService;
 
 @UtilityClass
 public class BagDraftMessageService {
     private static final String PICK_SUMMARY_START = "### Pending Picks";
     private static final Integer MAX_MESSAGE_SPLITS = 15;
 
-    public static record DraftChoiceInfo(
-        DraftChoice draftChoice,
-        Boolean isVisible,
-        Boolean isPendingPick,
-        Boolean isLegalToPick
-    ) {}
+    public record DraftChoiceInfo(
+            DraftChoice draftChoice, Boolean isVisible, Boolean isPendingPick, Boolean isLegalToPick) {}
 
     public static void sendPlayerDraftInfo(
             DraftManager draftManager,
@@ -59,9 +38,7 @@ public class BagDraftMessageService {
         Game game = draftManager.getGame();
         Player player = game.getPlayer(playerUserId);
         if (player == null) {
-            BotLogger.warning(
-                    new LogOrigin(game),
-                    "Cannot find drafting player in game: " + playerUserId);
+            BotLogger.warning(new LogOrigin(game), "Cannot find drafting player in game: " + playerUserId);
             return;
         }
 
@@ -89,7 +66,8 @@ public class BagDraftMessageService {
 
         for (Draftable d : draftManager.getDraftables()) {
             String draftableHeader = getSectionHeader(d.getDisplayName());
-            List<MessageTopLevelComponent> buttons = new ArrayList<>(getDraftButtonWithText(draftManager, d, draftChoices));
+            List<MessageTopLevelComponent> buttons =
+                    new ArrayList<>(getDraftButtonWithText(draftManager, d, draftChoices));
 
             builder.appendLine(draftableHeader);
             buttons.forEach(builder::append);
@@ -119,7 +97,8 @@ public class BagDraftMessageService {
     //     if (channel == null) return;
 
     //     String summary = "### Draft Summary\n"
-    //             + "> " + lockedInPlayers + " / " + draftManager.getPlayerUserIds().size() + " players have locked in their bags.\n";
+    //             + "> " + lockedInPlayers + " / " + draftManager.getPlayerUserIds().size() + " players have locked in
+    // their bags.\n";
 
     //     MessageHelper.sendMessageToChannel(channel, summary);
     // }
@@ -131,15 +110,13 @@ public class BagDraftMessageService {
             List<DraftChoiceInfo> draftChoices,
             List<Button> extraButtons
             // List<String> visibleChoiceKeys,
-            //List<String> pendingPicks
+            // List<String> pendingPicks
             ) {
 
         Game game = draftManager.getGame();
         Player player = game.getPlayer(playerUserId);
         if (player == null) {
-            BotLogger.warning(
-                    new LogOrigin(game),
-                    "Cannot find drafting player in game: " + playerUserId);
+            BotLogger.warning(new LogOrigin(game), "Cannot find drafting player in game: " + playerUserId);
             return;
         }
 
@@ -187,7 +164,8 @@ public class BagDraftMessageService {
         // }
 
         // getMessageHistory(event, channel)
-        //         .queue(editDraftInfo(draftManager, visibleChoiceKeys, pendingPicks, pendingPickSummary), BotLogger::catchRestError);
+        //         .queue(editDraftInfo(draftManager, visibleChoiceKeys, pendingPicks, pendingPickSummary),
+        // BotLogger::catchRestError);
     }
 
     // public static void pingCurrentPlayer(
@@ -213,9 +191,7 @@ public class BagDraftMessageService {
     // Produce button message
 
     private List<MessageTopLevelComponent> getDraftButtonWithText(
-            DraftManager draftManager,
-            Draftable draftable,
-            List<DraftChoiceInfo> draftChoices) {
+            DraftManager draftManager, Draftable draftable, List<DraftChoiceInfo> draftChoices) {
 
         List<MessageTopLevelComponent> components = new ArrayList<>();
 
@@ -223,14 +199,14 @@ public class BagDraftMessageService {
                 .collect(HashMap::new, (m, info) -> m.put(info.draftChoice.getChoiceKey(), info), Map::putAll);
 
         List<DraftChoice> allDraftChoices = draftable.getAllDraftChoices();
-        for(DraftChoice choice: allDraftChoices) {
-            if(!choiceInfoByKey.containsKey(choice.getChoiceKey())) {
+        for (DraftChoice choice : allDraftChoices) {
+            if (!choiceInfoByKey.containsKey(choice.getChoiceKey())) {
                 // Assumed not visible/legal
                 continue;
             }
 
             DraftChoiceInfo info = choiceInfoByKey.get(choice.getChoiceKey());
-            if(!info.isVisible) {
+            if (!info.isVisible) {
                 // No buttons for invisible choices
                 continue;
             }
@@ -238,9 +214,9 @@ public class BagDraftMessageService {
             String buttonCustomId = choice.getButton().getCustomId();
 
             Button pickButton = null;
-            if(info.isPendingPick) {
+            if (info.isPendingPick) {
                 pickButton = Buttons.red(buttonCustomId, "Unpick");
-            } else if(info.isLegalToPick) {
+            } else if (info.isLegalToPick) {
                 pickButton = Buttons.green(buttonCustomId, "Pick");
             } else {
                 pickButton = Buttons.gray(buttonCustomId, "Unavailable").withDisabled(true);
@@ -259,19 +235,22 @@ public class BagDraftMessageService {
         return components;
     }
 
-    private List<Button> getDraftButtons(DraftManager draftManager, Draftable draftable, List<DraftChoiceInfo> allDraftChoices) {
+    private List<Button> getDraftButtons(
+            DraftManager draftManager, Draftable draftable, List<DraftChoiceInfo> allDraftChoices) {
         // List<DraftChoice> allDraftChoices = draftable.getAllDraftChoices();
         List<DraftChoiceInfo> draftChoiceInfos = allDraftChoices.stream()
-            .filter(info -> info.draftChoice().getType().equals(draftable.getType()))
-            .filter(info -> info.isVisible())
-            .toList();
+                .filter(info -> info.draftChoice().getType().equals(draftable.getType()))
+                .filter(info -> info.isVisible())
+                .toList();
         List<Button> buttons = new ArrayList<>();
         for (DraftChoiceInfo info : draftChoiceInfos) {
             buttons.add(getDraftButton(info));
         }
 
         // Append custom buttons
-        buttons.addAll(draftable.getCustomChoiceButtons(draftChoiceInfos.stream().map(info -> info.draftChoice().getChoiceKey()).toList()));
+        buttons.addAll(draftable.getCustomChoiceButtons(draftChoiceInfos.stream()
+                .map(info -> info.draftChoice().getChoiceKey())
+                .toList()));
 
         return buttons;
     }
@@ -279,15 +258,15 @@ public class BagDraftMessageService {
     private Button getDraftButton(DraftChoiceInfo info) {
         String buttonCustomId = info.draftChoice.getButton().getCustomId();
         Button pickButton = null;
-            if(info.isPendingPick) {
-                pickButton = Buttons.red(buttonCustomId, "Unpick");
-            } else if(info.isLegalToPick) {
-                pickButton = Buttons.green(buttonCustomId, "Pick");
-            } else {
-                pickButton = Buttons.gray(buttonCustomId, "Unavailable").withDisabled(true);
-            }
+        if (info.isPendingPick) {
+            pickButton = Buttons.red(buttonCustomId, "Unpick");
+        } else if (info.isLegalToPick) {
+            pickButton = Buttons.green(buttonCustomId, "Pick");
+        } else {
+            pickButton = Buttons.gray(buttonCustomId, "Unavailable").withDisabled(true);
+        }
 
-            return pickButton;
+        return pickButton;
     }
 
     // Summary generation
@@ -349,16 +328,13 @@ public class BagDraftMessageService {
     //     return sb.toString();
     // }
 
-    private String getPendingPickSummary(
-            DraftManager draftManager,
-            List<DraftChoiceInfo> draftChoices) {
+    private String getPendingPickSummary(DraftManager draftManager, List<DraftChoiceInfo> draftChoices) {
 
         StringBuilder sb = new StringBuilder();
         sb.append(PICK_SUMMARY_START).append(System.lineSeparator());
 
-        List<DraftChoiceInfo> pendingPicks = draftChoices.stream()
-                .filter(info -> info.isPendingPick)
-                .toList();
+        List<DraftChoiceInfo> pendingPicks =
+                draftChoices.stream().filter(info -> info.isPendingPick).toList();
 
         if (pendingPicks.isEmpty()) {
             sb.append("> No pending picks.");
@@ -367,9 +343,8 @@ public class BagDraftMessageService {
 
         for (DraftChoiceInfo info : pendingPicks) {
             sb.append("> - ");
-            sb.append(info.draftChoice.getIdentifyingEmoji() != null
-                    ? info.draftChoice.getIdentifyingEmoji() + " "
-                    : "");
+            sb.append(
+                    info.draftChoice.getIdentifyingEmoji() != null ? info.draftChoice.getIdentifyingEmoji() + " " : "");
             sb.append("**").append(info.draftChoice.getUnformattedName()).append("**");
             sb.append(System.lineSeparator());
         }

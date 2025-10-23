@@ -3,7 +3,6 @@ package ti4.message.componentsV2;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-
 import lombok.Getter;
 import net.dv8tion.jda.api.components.Component;
 import net.dv8tion.jda.api.components.buttons.Button;
@@ -143,7 +142,7 @@ public class MessageV2Editor {
      * Apply changes to recent messages in a channel. This is useful for editing
      * messages that are very likely to be near the bottom of a channel. Especially
      * useful for custom channels, such as draft channels.
-     * 
+     *
      * If you're doing any text updates, be sure that the pattern is highly specific.
      * This method will probably check messages you didn't intend.
      * @param channel The channel to edit messages in.
@@ -151,21 +150,24 @@ public class MessageV2Editor {
      * @param onApplied A callback that accepts a boolean indicating if any changes were made.
      */
     public void applyToRecentMessages(MessageChannel channel, int messageLookback, Consumer<Boolean> onApplied) {
-        channel.getHistoryAround(channel.getLatestMessageIdLong(), messageLookback).queue(messageHistory -> {
-            List<Message> recentMessages = messageHistory.getRetrievedHistory();
-            if(recentMessages.isEmpty()) {
-                onApplied.accept(false);
-                return;
-            }
-            boolean madeChanges = false;
-            for(Message message : recentMessages) {
-                if(!message.getAuthor().isBot()) {
-                    continue;
-                }
-                madeChanges = applyToMessage(message) || madeChanges;
-            }
-            onApplied.accept(madeChanges);
-        }, BotLogger::catchRestError);
+        channel.getHistoryAround(channel.getLatestMessageIdLong(), messageLookback)
+                .queue(
+                        messageHistory -> {
+                            List<Message> recentMessages = messageHistory.getRetrievedHistory();
+                            if (recentMessages.isEmpty()) {
+                                onApplied.accept(false);
+                                return;
+                            }
+                            boolean madeChanges = false;
+                            for (Message message : recentMessages) {
+                                if (!message.getAuthor().isBot()) {
+                                    continue;
+                                }
+                                madeChanges = applyToMessage(message) || madeChanges;
+                            }
+                            onApplied.accept(madeChanges);
+                        },
+                        BotLogger::catchRestError);
     }
 
     /**
@@ -173,7 +175,7 @@ public class MessageV2Editor {
      * when a complex message is split into multiple messages. You can respond to
      * an interaction in one message, while also affecting related components that
      * were split into a different message.
-     * 
+     *
      * If you're doing any text updates, be sure that the pattern is highly specific.
      * This method will probably check messages you didn't intend.
      * @param targetMessage The message to edit, and use as a center point for surrounding messages.
@@ -182,23 +184,27 @@ public class MessageV2Editor {
      */
     public void applyAroundMessage(Message targetMessage, int limit, Consumer<Boolean> onApplied) {
         MessageChannel channel = targetMessage.getChannel();
-        channel.getHistoryAround(targetMessage.getIdLong(), limit).queue(messageHistory -> {
-            boolean madeChanges = applyToMessage(targetMessage);
-            for(Message message : messageHistory.getRetrievedHistory()) {
+        channel.getHistoryAround(targetMessage.getIdLong(), limit)
+                .queue(
+                        messageHistory -> {
+                            boolean madeChanges = applyToMessage(targetMessage);
+                            for (Message message : messageHistory.getRetrievedHistory()) {
 
-                // Skip the target message; this is a sanity check since it shouldn't be included in the history.
-                if(message.getIdLong() == targetMessage.getIdLong()) {
-                    continue;
-                }
+                                // Skip the target message; this is a sanity check since it shouldn't be included in the
+                                // history.
+                                if (message.getIdLong() == targetMessage.getIdLong()) {
+                                    continue;
+                                }
 
-                if(!message.getAuthor().isBot()) {
-                    continue;
-                }
-                
-                madeChanges = applyToMessage(message) || madeChanges;
-            }
-            onApplied.accept(madeChanges);
-        }, BotLogger::catchRestError);
+                                if (!message.getAuthor().isBot()) {
+                                    continue;
+                                }
+
+                                madeChanges = applyToMessage(message) || madeChanges;
+                            }
+                            onApplied.accept(madeChanges);
+                        },
+                        BotLogger::catchRestError);
     }
 
     /**
@@ -212,7 +218,7 @@ public class MessageV2Editor {
         replacer.startingChanges();
         MessageComponentTree newComponents = messageComponents.replace(replacer);
         Boolean madeChanges = replacer.finishedChanges();
-        if(!madeChanges) {
+        if (!madeChanges) {
             return false;
         }
         MessageEditAction editAction = message.editMessageComponents(newComponents);

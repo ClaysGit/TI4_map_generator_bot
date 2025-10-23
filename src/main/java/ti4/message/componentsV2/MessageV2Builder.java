@@ -29,7 +29,6 @@ import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import org.apache.commons.lang3.StringUtils;
-
 import ti4.helpers.Constants;
 import ti4.helpers.StringHelper;
 import ti4.message.MessageHelper;
@@ -164,16 +163,17 @@ public class MessageV2Builder {
 
     public void send() {
         List<MessageCreateData> combinedComponents = build();
-        if(combinedComponents.isEmpty()) {
+        if (combinedComponents.isEmpty()) {
             return;
         }
-        if(maxSplits != null && combinedComponents.size() > maxSplits) {
+        if (maxSplits != null && combinedComponents.size() > maxSplits) {
             List<String> componentTrees = combinedComponents.stream()
                     .map(msg -> MessageV2Builder.ComponentTypeTree(msg.getComponentTree()))
                     .collect(Collectors.toList());
-            BotLogger.warning( Constants.jabberwockyPing() + "Attempted to send a v2 message that exceeds the component limit, "
-                    + "but splitting is disabled. Message not sent.\n"
-                    + String.join("\n---\n", componentTrees));
+            BotLogger.warning(
+                    Constants.jabberwockyPing() + "Attempted to send a v2 message that exceeds the component limit, "
+                            + "but splitting is disabled. Message not sent.\n"
+                            + String.join("\n---\n", componentTrees));
             return;
         }
         MessageHelper.sendMessagesWithRetry(channel, combinedComponents, null, "Failed to send v2 message", 1);
@@ -232,8 +232,7 @@ public class MessageV2Builder {
         }
         // Flush any remaining text
         if (currentText != null) {
-            List<String> chunkedText =
-                    StringHelper.chunkMessage(currentText.toString(), Message.MAX_CONTENT_LENGTH);
+            List<String> chunkedText = StringHelper.chunkMessage(currentText.toString(), Message.MAX_CONTENT_LENGTH);
             for (String chunk : chunkedText) {
                 topLevelComponents.add(TextDisplay.of(chunk));
             }
@@ -252,7 +251,8 @@ public class MessageV2Builder {
                         + MessageV2Builder.ComponentTypeTree(component));
                 continue;
             }
-            if (currentCount + componentCount > Message.MAX_COMPONENT_COUNT_IN_COMPONENT_TREE && !currentPartition.isEmpty()) {
+            if (currentCount + componentCount > Message.MAX_COMPONENT_COUNT_IN_COMPONENT_TREE
+                    && !currentPartition.isEmpty()) {
                 messages.add(buildMessage(currentPartition));
                 currentPartition.clear();
                 currentCount = 0;

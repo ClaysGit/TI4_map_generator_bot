@@ -99,8 +99,7 @@ public class DraftSystemSettings extends SettingsMenu {
         factionSettings = new FactionDraftableSettings(game, json != null ? json.get("factionSettings") : null, this);
         publicSnakeDraftSettings =
                 new PublicSnakeDraftSettings(game, json != null ? json.get("publicSnakeDraftSettings") : null, this);
-        bagDraftSettings =
-                new BagDraftSettings(game, json != null ? json.get("bagDraftSettings") : null, this);
+        bagDraftSettings = new BagDraftSettings(game, json != null ? json.get("bagDraftSettings") : null, this);
 
         if (json != null && json.has("messageId")) {
             setMessageId(json.get("messageId").asText(null));

@@ -14,7 +14,7 @@ public interface TrackingComponentReplacer extends ComponentReplacer {
      * Called after the component tree's replace method has finished with the
      * ComponentReplacer.
      * This returns the state being tracked for the operation
-     * 
+     *
      * @return The state that was produced by tracking the operation.
      */
     Boolean finishedChanges();
