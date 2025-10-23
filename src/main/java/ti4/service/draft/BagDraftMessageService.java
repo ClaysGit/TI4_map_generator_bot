@@ -13,6 +13,7 @@ import lombok.experimental.UtilityClass;
 import net.dv8tion.jda.api.components.MessageTopLevelComponent;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Message.Attachment;
@@ -24,6 +25,8 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.utils.FileUpload;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.function.Consumers;
+
+import ti4.buttons.Buttons;
 import ti4.helpers.Helper;
 import ti4.map.Game;
 import ti4.map.Player;
@@ -38,12 +41,19 @@ import ti4.spring.jda.JdaService;
 @UtilityClass
 public class BagDraftMessageService {
     private static final String PICK_SUMMARY_START = "### Pending Picks";
+    private static final Integer MAX_MESSAGE_SPLITS = 15;
+
+    public static record DraftChoiceInfo(
+        DraftChoice draftChoice,
+        Boolean isVisible,
+        Boolean isPendingPick,
+        Boolean isLegalToPick
+    ) {}
 
     public static void sendPlayerDraftInfo(
             DraftManager draftManager,
             String playerUserId,
-            List<String> visibleChoiceKeys,
-            List<String> pendingPicks,
+            List<DraftChoiceInfo> draftChoices,
             List<Button> extraButtons) {
 
         Game game = draftManager.getGame();
@@ -58,7 +68,12 @@ public class BagDraftMessageService {
         MessageChannel channel = BagChannelService.regenerateBagChannel(game, player);
         if (channel == null) return;
 
-        MessageV2Builder builder = new MessageV2Builder(channel);
+        MessageV2Builder builder = new MessageV2Builder(channel, MAX_MESSAGE_SPLITS);
+
+        List<String> visibleChoiceKeys = new ArrayList<>(draftChoices.stream()
+                .filter(info -> info.isVisible)
+                .map(info -> info.draftChoice.getChoiceKey())
+                .toList());
 
         for (Draftable d : draftManager.getDraftables()) {
             String uniqueKey = game.getName() + "_" + d.getType().toString().toLowerCase();
@@ -69,14 +84,12 @@ public class BagDraftMessageService {
             }
         }
 
-        
-
-        String draftSummary = getSummary(draftManager, visibleChoiceKeys);
-        builder.append(draftSummary);
+        // String draftSummary = getSummary(draftManager, draftChoices);
+        // builder.append(draftSummary);
 
         for (Draftable d : draftManager.getDraftables()) {
             String draftableHeader = getSectionHeader(d.getDisplayName());
-            List<MessageTopLevelComponent> buttons = new ArrayList<>(getDraftButtons(draftManager, d, visibleChoiceKeys));
+            List<MessageTopLevelComponent> buttons = new ArrayList<>(getDraftButtonWithText(draftManager, d, draftChoices));
 
             builder.appendLine(draftableHeader);
             buttons.forEach(builder::append);
@@ -85,11 +98,13 @@ public class BagDraftMessageService {
             // MessageHelper.sendMessageToChannelWithButtonsAndNoUndo(channel, draftableHeader, buttons);
         }
 
-        String pendingPickSummary = getPendingPickSummary(draftManager, pendingPicks);
+        String pendingPickSummary = getPendingPickSummary(draftManager, draftChoices);
         builder.appendReplaceableText(pendingPickSummary);
         if (extraButtons != null && !extraButtons.isEmpty()) {
             builder.append(extraButtons);
         }
+        // builder.append(getSubmitPicksText());
+        // builder.append(getSubmitPicksButton(canSubmitPicks));
         // MessageHelper.sendMessageToChannel(channel, pendingPickSummary);
 
         builder.send();
@@ -113,21 +128,63 @@ public class BagDraftMessageService {
             GenericInteractionCreateEvent event,
             DraftManager draftManager,
             String playerUserId,
+            List<DraftChoiceInfo> draftChoices,
+            List<Button> extraButtons
             // List<String> visibleChoiceKeys,
-            List<String> pendingPicks) {
+            //List<String> pendingPicks
+            ) {
 
         Game game = draftManager.getGame();
-        MessageChannel channel = game.getMainGameChannel();
+        Player player = game.getPlayer(playerUserId);
+        if (player == null) {
+            BotLogger.warning(
+                    new LogOrigin(game),
+                    "Cannot find drafting player in game: " + playerUserId);
+            return;
+        }
+
+        MessageChannel channel = BagChannelService.regenerateBagChannel(game, player);
         if (channel == null) return;
 
-        MessageV2Editor editor = new MessageV2Editor(channel);
+        MessageV2Editor editor = new MessageV2Editor();
 
-        String pendingPickSummary = getPendingPickSummary(draftManager, pendingPicks);
+        List<String> visibleChoiceKeys = new ArrayList<>(draftChoices.stream()
+                .filter(info -> info.isVisible)
+                .map(info -> info.draftChoice.getChoiceKey())
+                .toList());
+        for (Draftable d : draftManager.getDraftables()) {
+            String uniqueKey = game.getName() + "_" + d.getType().toString().toLowerCase();
+            FileUpload uploadedImage = d.generateSummaryImage(draftManager, uniqueKey, visibleChoiceKeys);
+            if (uploadedImage != null) {
+                editor.replace(Pattern.quote(uniqueKey), uploadedImage);
+                // MessageHelper.sendFileUploadToChannel(channel, uploadedImage);
+            }
+        }
+
+        String pendingPickSummary = getPendingPickSummary(draftManager, draftChoices);
         editor.replace("^" + PICK_SUMMARY_START, pendingPickSummary);
 
-        if(event instanceof ButtonInteractionEvent buttonEvent) {
-            String buttonId = buttonEvent.getCustomId();
+        for (Draftable d : draftManager.getDraftables()) {
+            List<Button> buttons = new ArrayList<>(getDraftButtons(draftManager, d, draftChoices));
+            buttons.stream().forEach(button -> editor.replace(button.getCustomId(), button));
         }
+        if (extraButtons != null && !extraButtons.isEmpty()) {
+            for (Button button : extraButtons) {
+                editor.replace(button.getCustomId(), button);
+            }
+        }
+
+        editor.applyToRecentMessages(channel, 15, madeChanges -> {
+            // If no changes were able to be made, there's an issue with the'
+            // bag channel, perhaps. Just regenerate the whole thing.
+            if (!madeChanges) {
+                sendPlayerDraftInfo(draftManager, playerUserId, draftChoices, extraButtons);
+            }
+        });
+
+        // if(event instanceof ButtonInteractionEvent buttonEvent) {
+        //     String buttonId = buttonEvent.getCustomId();
+        // }
 
         // getMessageHistory(event, channel)
         //         .queue(editDraftInfo(draftManager, visibleChoiceKeys, pendingPicks, pendingPickSummary), BotLogger::catchRestError);
@@ -155,239 +212,174 @@ public class BagDraftMessageService {
 
     // Produce button message
 
-    private List<Button> getDraftButtons(DraftManager draftManager, Draftable draftable) {
+    private List<MessageTopLevelComponent> getDraftButtonWithText(
+            DraftManager draftManager,
+            Draftable draftable,
+            List<DraftChoiceInfo> draftChoices) {
+
+        List<MessageTopLevelComponent> components = new ArrayList<>();
+
+        Map<String, DraftChoiceInfo> choiceInfoByKey = draftChoices.stream()
+                .collect(HashMap::new, (m, info) -> m.put(info.draftChoice.getChoiceKey(), info), Map::putAll);
+
         List<DraftChoice> allDraftChoices = draftable.getAllDraftChoices();
-        List<Button> buttons = new ArrayList<>();
-        for (DraftChoice choice : allDraftChoices) {
-            // Skip this choice if someone already has it.
-            if (draftManager
-                            .getPlayersWithChoiceKey(draftable.getType(), choice.getChoiceKey())
-                            .size()
-                    > 0) {
+        for(DraftChoice choice: allDraftChoices) {
+            if(!choiceInfoByKey.containsKey(choice.getChoiceKey())) {
+                // Assumed not visible/legal
                 continue;
             }
 
-            buttons.add(choice.getButton());
+            DraftChoiceInfo info = choiceInfoByKey.get(choice.getChoiceKey());
+            if(!info.isVisible) {
+                // No buttons for invisible choices
+                continue;
+            }
+
+            String buttonCustomId = choice.getButton().getCustomId();
+
+            Button pickButton = null;
+            if(info.isPendingPick) {
+                pickButton = Buttons.red(buttonCustomId, "Unpick");
+            } else if(info.isLegalToPick) {
+                pickButton = Buttons.green(buttonCustomId, "Pick");
+            } else {
+                pickButton = Buttons.gray(buttonCustomId, "Unavailable").withDisabled(true);
+            }
+
+            StringBuilder choiceText = new StringBuilder();
+            choiceText.append(choice.getIdentifyingEmoji());
+            choiceText.append(" ");
+            choiceText.append("**").append(choice.getUnformattedName()).append("**");
+            choiceText.append(System.lineSeparator()).append("> ").append(choice.getFormattedName());
+
+            Section pickSection = Section.of(pickButton, TextDisplay.of(choiceText.toString()));
+            components.add(pickSection);
+        }
+
+        return components;
+    }
+
+    private List<Button> getDraftButtons(DraftManager draftManager, Draftable draftable, List<DraftChoiceInfo> allDraftChoices) {
+        // List<DraftChoice> allDraftChoices = draftable.getAllDraftChoices();
+        List<DraftChoiceInfo> draftChoiceInfos = allDraftChoices.stream()
+            .filter(info -> info.draftChoice().getType().equals(draftable.getType()))
+            .filter(info -> info.isVisible())
+            .toList();
+        List<Button> buttons = new ArrayList<>();
+        for (DraftChoiceInfo info : draftChoiceInfos) {
+            buttons.add(getDraftButton(info));
         }
 
         // Append custom buttons
-        buttons.addAll(draftable.getCustomChoiceButtons(null));
+        buttons.addAll(draftable.getCustomChoiceButtons(draftChoiceInfos.stream().map(info -> info.draftChoice().getChoiceKey()).toList()));
 
         return buttons;
     }
 
-    // Summary generation
-
-    private static String getSummary(
-            DraftManager draftManager, List<String> playerOrder, String currentPlayer, String nextPlayer) {
-        Game game = draftManager.getGame();
-        List<Draftable> draftables = draftManager.getDraftables();
-        int padding = String.format("%s", playerOrder.size()).length() + 1;
-
-        Map<DraftableType, DraftChoice> defaultChoices = draftables.stream()
-                .collect(HashMap::new, (m, d) -> m.put(d.getType(), d.getNothingPickedChoice()), Map::putAll);
-
-        StringBuilder sb = new StringBuilder(SUMMARY_START);
-        int pickNum = 1;
-        for (String userId : playerOrder) {
-            Player player = game.getPlayer(userId);
-            PlayerDraftState picks = draftManager.getPlayerStates().get(userId);
-            if (player == null || picks == null)
-                throw new IllegalStateException("Player or picks missing for playerID " + userId);
-
-            sb.append("\n> `").append(Helper.leftpad(pickNum + ".", padding)).append("` ");
-            StringBuilder bulletSummary = new StringBuilder();
-            for (Draftable draftable : draftables) {
-                List<String> longChoiceNames = new ArrayList<>();
-                if (picks.getPicks().containsKey(draftable.getType())) {
-                    List<DraftChoice> draftablePicks = picks.getPicks().get(draftable.getType());
-                    for (DraftChoice choice : draftablePicks) {
-                        if (choice.getIdentifyingEmoji() != null) {
-                            sb.append(choice.getIdentifyingEmoji());
-                        } else {
-                            longChoiceNames.add(choice.getFormattedName());
-                        }
-                    }
-                } else if (defaultChoices.containsKey(draftable.getType())) {
-                    DraftChoice noChoice = defaultChoices.get(draftable.getType());
-                    if (noChoice.getIdentifyingEmoji() != null) {
-                        sb.append(noChoice.getIdentifyingEmoji());
-                    }
-                    // Skip adding anything if no default emoji
-                }
-
-                if (longChoiceNames.size() > 0) {
-                    bulletSummary.append("- " + draftable.getDisplayName() + ": " + System.lineSeparator() + "  - ");
-                    bulletSummary.append(String.join(System.lineSeparator() + "  - ", longChoiceNames));
-                }
+    private Button getDraftButton(DraftChoiceInfo info) {
+        String buttonCustomId = info.draftChoice.getButton().getCustomId();
+        Button pickButton = null;
+            if(info.isPendingPick) {
+                pickButton = Buttons.red(buttonCustomId, "Unpick");
+            } else if(info.isLegalToPick) {
+                pickButton = Buttons.green(buttonCustomId, "Pick");
+            } else {
+                pickButton = Buttons.gray(buttonCustomId, "Unavailable").withDisabled(true);
             }
 
-            if (nextPlayer != null && userId.equals(nextPlayer)) sb.append("*");
-            if (currentPlayer != null && userId.equals(currentPlayer)) sb.append("**__");
-            sb.append(player.getUserName());
-            if (currentPlayer != null && userId.equals(currentPlayer)) sb.append("   <- CURRENTLY DRAFTING");
-            if (nextPlayer != null && userId.equals(nextPlayer)) sb.append("   <- on deck");
-            if (currentPlayer != null && userId.equals(currentPlayer)) sb.append("__**");
-            if (nextPlayer != null && userId.equals(nextPlayer)) sb.append("*");
+            return pickButton;
+    }
 
-            pickNum++;
+    // Summary generation
+
+    // private static String getSummary(
+    //         DraftManager draftManager, List<String> playerOrder, String currentPlayer, String nextPlayer) {
+    //     Game game = draftManager.getGame();
+    //     List<Draftable> draftables = draftManager.getDraftables();
+    //     int padding = String.format("%s", playerOrder.size()).length() + 1;
+
+    //     Map<DraftableType, DraftChoice> defaultChoices = draftables.stream()
+    //             .collect(HashMap::new, (m, d) -> m.put(d.getType(), d.getNothingPickedChoice()), Map::putAll);
+
+    //     StringBuilder sb = new StringBuilder(SUMMARY_START);
+    //     int pickNum = 1;
+    //     for (String userId : playerOrder) {
+    //         Player player = game.getPlayer(userId);
+    //         PlayerDraftState picks = draftManager.getPlayerStates().get(userId);
+    //         if (player == null || picks == null)
+    //             throw new IllegalStateException("Player or picks missing for playerID " + userId);
+
+    //         sb.append("\n> `").append(Helper.leftpad(pickNum + ".", padding)).append("` ");
+    //         StringBuilder bulletSummary = new StringBuilder();
+    //         for (Draftable draftable : draftables) {
+    //             List<String> longChoiceNames = new ArrayList<>();
+    //             if (picks.getPicks().containsKey(draftable.getType())) {
+    //                 List<DraftChoice> draftablePicks = picks.getPicks().get(draftable.getType());
+    //                 for (DraftChoice choice : draftablePicks) {
+    //                     if (choice.getIdentifyingEmoji() != null) {
+    //                         sb.append(choice.getIdentifyingEmoji());
+    //                     } else {
+    //                         longChoiceNames.add(choice.getFormattedName());
+    //                     }
+    //                 }
+    //             } else if (defaultChoices.containsKey(draftable.getType())) {
+    //                 DraftChoice noChoice = defaultChoices.get(draftable.getType());
+    //                 if (noChoice.getIdentifyingEmoji() != null) {
+    //                     sb.append(noChoice.getIdentifyingEmoji());
+    //                 }
+    //                 // Skip adding anything if no default emoji
+    //             }
+
+    //             if (longChoiceNames.size() > 0) {
+    //                 bulletSummary.append("- " + draftable.getDisplayName() + ": " + System.lineSeparator() + "  - ");
+    //                 bulletSummary.append(String.join(System.lineSeparator() + "  - ", longChoiceNames));
+    //             }
+    //         }
+
+    //         if (nextPlayer != null && userId.equals(nextPlayer)) sb.append("*");
+    //         if (currentPlayer != null && userId.equals(currentPlayer)) sb.append("**__");
+    //         sb.append(player.getUserName());
+    //         if (currentPlayer != null && userId.equals(currentPlayer)) sb.append("   <- CURRENTLY DRAFTING");
+    //         if (nextPlayer != null && userId.equals(nextPlayer)) sb.append("   <- on deck");
+    //         if (currentPlayer != null && userId.equals(currentPlayer)) sb.append("__**");
+    //         if (nextPlayer != null && userId.equals(nextPlayer)) sb.append("*");
+
+    //         pickNum++;
+    //     }
+    //     return sb.toString();
+    // }
+
+    private String getPendingPickSummary(
+            DraftManager draftManager,
+            List<DraftChoiceInfo> draftChoices) {
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(PICK_SUMMARY_START).append(System.lineSeparator());
+
+        List<DraftChoiceInfo> pendingPicks = draftChoices.stream()
+                .filter(info -> info.isPendingPick)
+                .toList();
+
+        if (pendingPicks.isEmpty()) {
+            sb.append("> No pending picks.");
+            return sb.toString();
         }
+
+        for (DraftChoiceInfo info : pendingPicks) {
+            sb.append("> - ");
+            sb.append(info.draftChoice.getIdentifyingEmoji() != null
+                    ? info.draftChoice.getIdentifyingEmoji() + " "
+                    : "");
+            sb.append("**").append(info.draftChoice.getUnformattedName()).append("**");
+            sb.append(System.lineSeparator());
+        }
+
+        sb.append("Once you've selected enough picks, you can submit your choices.");
+
         return sb.toString();
     }
 
     private static String getSectionHeader(String displayName) {
         return "__**" + displayName.toUpperCase() + ":**__";
-    }
-
-    // Edit previous messages
-
-    private static MessageRetrieveAction getMessageHistory(
-            GenericInteractionCreateEvent event, MessageChannel channel) {
-        if (event != null && event.getMessageChannel() == channel && event instanceof ButtonInteractionEvent bEvent) {
-            return channel.getHistoryAround(bEvent.getMessage(), 15);
-        }
-        return channel.getHistoryAround(channel.getLatestMessageIdLong(), 100);
-    }
-
-    private Consumer<MessageHistory> editDraftInfo(
-            DraftManager draftManager, DraftableType draftableType, String newSummary) {
-        Draftable draftable = draftManager.getDraftable(draftableType);
-        if (draftable == null) {
-            throw new IllegalArgumentException("No draftable of type " + draftableType + " found");
-        }
-        Predicate<String> isDraftableType = txt -> {
-            String header = getSectionHeader(draftable.getDisplayName());
-            return txt.equals(header);
-        };
-        List<Button> draftableButtons = new ArrayList<>(getDraftButtons(draftManager, draftable));
-
-        // Images are good place for representing several elements of the draft state.
-        // Assume they're not siloed to any draftable, and always try to do them all.
-        Map<String, FileUpload> updateImageKeys = new HashMap<>();
-        for (Draftable d : draftManager.getDraftables()) {
-            String key = draftManager.getGame().getName() + "_"
-                    + d.getType().toString().toLowerCase();
-            FileUpload fileUpload = d.generateSummaryImage(draftManager, key, null);
-            if (fileUpload != null) {
-                updateImageKeys.put(key, fileUpload);
-            }
-        }
-
-        return hist -> {
-            boolean summaryDone = false, categoryDone = false;
-            for (Message msg : hist.getRetrievedHistory()) {
-                if (!msg.getAuthor().getId().equals(JdaService.getBotId())) continue;
-                String txt = msg.getContentRaw();
-
-                if (!summaryDone && txt.startsWith(SUMMARY_START)) {
-                    summaryDone = true;
-                    editMessage(msg, newSummary, null);
-                }
-
-                if (!categoryDone && isDraftableType.test(txt)) {
-                    categoryDone = true;
-                    editMessage(msg, null, draftableButtons);
-                }
-
-                if (!updateImageKeys.isEmpty()) {
-                    for (Attachment atch : msg.getAttachments()) {
-                        String keyDone = null;
-                        for (Map.Entry<String, FileUpload> entry : updateImageKeys.entrySet()) {
-                            String uniqueKey = entry.getKey();
-                            if (atch.getFileName().contains(uniqueKey)) {
-                                keyDone = uniqueKey;
-                                FileUpload draftableImage = entry.getValue();
-                                msg.editMessageAttachments(draftableImage).queue();
-                                break;
-                            }
-                        }
-                        if (keyDone != null) {
-                            updateImageKeys.remove(keyDone);
-                        }
-                    }
-                }
-            }
-        };
-    }
-
-    private void editMessage(Message msg, String newMessage, List<Button> newButtons) {
-        List<MessageTopLevelComponent> newComponents = new ArrayList<>();
-        if (newButtons != null) {
-            List<List<Button>> partitioned = new ArrayList<>(ListUtils.partition(newButtons, 5));
-            List<ActionRow> newRows = partitioned.stream().map(ActionRow::of).toList();
-            newComponents.addAll(newRows);
-        }
-
-        if (newMessage != null && newButtons != null)
-            msg.editMessage(newMessage).setComponents(newComponents).queue(Consumers.nop(), BotLogger::catchRestError);
-        else if (newMessage != null) msg.editMessage(newMessage).queue(Consumers.nop(), BotLogger::catchRestError);
-        else if (newButtons != null)
-            msg.editMessageComponents(newComponents).queue(Consumers.nop(), BotLogger::catchRestError);
-    }
-
-    // Clear previous
-
-    /**
-     * This method is assumed to ONLY run as a callback on player ping. Therefore,
-     * all found pings will be removed
-     */
-    private void clearHistMessages(
-            MessageHistory hist,
-            boolean clearFirstPing,
-            List<String> clearMessageHeaders,
-            List<String> clearAttachments) {
-        boolean removePings = clearFirstPing;
-        HashSet<String> removeHeaders = new HashSet<>(clearMessageHeaders != null ? clearMessageHeaders : List.of());
-        HashSet<String> removeAttachments = new HashSet<>(clearAttachments != null ? clearAttachments : List.of());
-        HashSet<String> seenHeader = new HashSet<>();
-        HashSet<String> seenAttachment = new HashSet<>();
-        for (Message msg : hist.getRetrievedHistory()) {
-            String msgTxt = msg.getContentRaw();
-            if (msgTxt.contains("is up to draft")) {
-                if (removePings) msg.delete().queue();
-                removePings = true;
-            }
-
-            for (String header : removeHeaders) {
-                if (msgTxt.startsWith(header)) {
-                    if (seenHeader.contains(header)) {
-                        msg.delete().queue();
-                    } else {
-                        seenHeader.add(header);
-                    }
-                    break;
-                }
-            }
-
-            if (msgTxt.contains(SUMMARY_START)) {
-                if (seenHeader.contains(SUMMARY_START)) {
-                    msg.delete().queue();
-                } else {
-                    seenHeader.add(SUMMARY_START);
-                }
-            }
-
-            for (Attachment atch : msg.getAttachments()) {
-                for (String attachName : removeAttachments) {
-                    if (atch.getFileName().contains(attachName)) {
-                        if (seenAttachment.contains(attachName)) {
-                            msg.delete().queue();
-                        } else {
-                            seenAttachment.add(attachName);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    private MessageFunction clearOldPingsAndButtonsFunc(
-            boolean clearFirstPing, List<String> clearMessageHeaders, List<String> clearAttachments) {
-        return msg -> msg.getChannel()
-                .getHistoryBefore(msg, 100)
-                .queue(
-                        hist -> clearHistMessages(hist, clearFirstPing, clearMessageHeaders, clearAttachments),
-                        BotLogger::catchRestError);
     }
 }

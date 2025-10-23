@@ -1,6 +1,5 @@
 package ti4.message.componentsV2;
 
-import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -23,11 +22,9 @@ import net.dv8tion.jda.api.components.separator.Separator;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.thumbnail.Thumbnail;
-import net.dv8tion.jda.api.components.tree.ComponentTree;
 import net.dv8tion.jda.api.components.tree.MessageComponentTree;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
-import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
@@ -35,26 +32,32 @@ import org.apache.commons.lang3.StringUtils;
 
 import ti4.helpers.Constants;
 import ti4.helpers.StringHelper;
-import ti4.message.GameMessageType;
 import ti4.message.MessageHelper;
-import ti4.message.MessageHelper.MessageFunction;
 import ti4.message.logging.BotLogger;
 
 public class MessageV2Builder {
     private final MessageChannel channel;
     private final List<MessagePart> parts = new ArrayList<>();
-    private final boolean allowSplit;
+    private final Integer maxSplits;
 
     public MessageV2Builder(MessageChannel channel) {
         Objects.requireNonNull(channel, "Channel cannot be null");
         this.channel = channel;
-        this.allowSplit = true;
+        this.maxSplits = null;
     }
 
-    public MessageV2Builder(MessageChannel channel, boolean allowSplit) {
+    /**
+     * Constructor for MessageV2Builder with a maximum number of splits.
+     * @param channel The channel to send the message to.
+     * @param maxSplits The maximum number of message splits allowed. If the built message
+     *                  exceeds this number of splits, an error is logged and the message is
+     *                  truncated. This is useful for messages that will be edited, so you can
+     *                  ensure queries for messages find all expected splits.
+     */
+    public MessageV2Builder(MessageChannel channel, int maxSplits) {
         Objects.requireNonNull(channel, "Channel cannot be null");
         this.channel = channel;
-        this.allowSplit = allowSplit;
+        this.maxSplits = maxSplits;
     }
 
     public enum MessagePartType {
@@ -164,7 +167,7 @@ public class MessageV2Builder {
         if(combinedComponents.isEmpty()) {
             return;
         }
-        if(!allowSplit && combinedComponents.size() > 1) {
+        if(maxSplits != null && combinedComponents.size() > maxSplits) {
             List<String> componentTrees = combinedComponents.stream()
                     .map(msg -> MessageV2Builder.ComponentTypeTree(msg.getComponentTree()))
                     .collect(Collectors.toList());

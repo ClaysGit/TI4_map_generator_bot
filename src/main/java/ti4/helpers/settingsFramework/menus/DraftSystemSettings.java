@@ -25,6 +25,7 @@ import ti4.service.draft.draftables.FactionDraftable;
 import ti4.service.draft.draftables.SeatDraftable;
 import ti4.service.draft.draftables.SliceDraftable;
 import ti4.service.draft.draftables.SpeakerOrderDraftable;
+import ti4.service.draft.orchestrators.BagDraftOrchestrator;
 import ti4.service.draft.orchestrators.PublicSnakeDraftOrchestrator;
 import ti4.service.milty.MiltyDraftSlice;
 
@@ -45,6 +46,7 @@ public class DraftSystemSettings extends SettingsMenu {
     private final SliceDraftableSettings sliceSettings;
     private final FactionDraftableSettings factionSettings;
     private final PublicSnakeDraftSettings publicSnakeDraftSettings;
+    private final BagDraftSettings bagDraftSettings;
     // Bonus Attributes
     @Setter
     private String preset = null;
@@ -93,6 +95,8 @@ public class DraftSystemSettings extends SettingsMenu {
         factionSettings = new FactionDraftableSettings(game, json != null ? json.get("factionSettings") : null, this);
         publicSnakeDraftSettings =
                 new PublicSnakeDraftSettings(game, json != null ? json.get("publicSnakeDraftSettings") : null, this);
+        bagDraftSettings =
+                new BagDraftSettings(game, json != null ? json.get("bagDraftSettings") : null, this);
 
         if (json != null && json.has("messageId")) {
             setMessageId(json.get("messageId").asText(null));
@@ -116,6 +120,9 @@ public class DraftSystemSettings extends SettingsMenu {
         }
         if (draftOrchestrator.getValue().equals(PublicSnakeDraftOrchestrator.class.getSimpleName())) {
             implemented.add(publicSnakeDraftSettings);
+        }
+        if (draftOrchestrator.getValue().equals(BagDraftOrchestrator.class.getSimpleName())) {
+            implemented.add(bagDraftSettings);
         }
         implemented.add(sourceSettings);
         return implemented;
@@ -186,7 +193,14 @@ public class DraftSystemSettings extends SettingsMenu {
     }
 
     public void setupMiltyPreset(int numSlices, int numFactions, List<MiltyDraftSlice> presetSlices) {
-        // TODO
+        getDraftablesList()
+                .setKeys(List.of(
+                        FactionDraftable.class.getSimpleName(),
+                        SliceDraftable.class.getSimpleName(),
+                        SpeakerOrderDraftable.class.getSimpleName()));
+        getDraftOrchestrator().setChosenKey(PublicSnakeDraftOrchestrator.class.getSimpleName());
+        getSliceSettings().getMapGenerationMode().setChosenKey("Milty");
+        setPreset("Milty Draft");
     }
 
     public void setupNucleusPreset() {
