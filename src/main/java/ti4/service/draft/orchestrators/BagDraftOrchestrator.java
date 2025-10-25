@@ -53,6 +53,12 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
         @Getter
         @Setter
         private boolean picksLocked;
+
+        // TODO: Add "previously seen" map of draftabletype to choice key+now missing
+        // then use that to show players what other options are floating around.
+        // "now missing" gets set when the same bag comes back around and a previously seen
+        // choice is no longer visible. Players will know what options are floating around,
+        // and what's been picked.
     }
 
     @Getter
@@ -127,7 +133,7 @@ public class BagDraftOrchestrator extends DraftOrchestrator {
 
             Button submitDraftChoices = getSubmitPicksButton();
             if (!canSubmitPicks(draftManager, playerUserId)) {
-                    submitDraftChoices.withStyle(ButtonStyle.SECONDARY).withDisabled(true);
+                submitDraftChoices.withStyle(ButtonStyle.SECONDARY).withDisabled(true);
             }
 
             BagDraftMessageService.sendPlayerDraftInfo(

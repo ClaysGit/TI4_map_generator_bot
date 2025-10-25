@@ -11,7 +11,6 @@ import net.dv8tion.jda.api.components.MessageTopLevelComponent;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.container.Container;
-import net.dv8tion.jda.api.components.section.Section;
 import net.dv8tion.jda.api.components.separator.Separator;
 import net.dv8tion.jda.api.components.separator.Separator.Spacing;
 import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
@@ -258,23 +257,23 @@ public class BagDraftMessageService {
             // }
             Container pContainer = Container.of(TextDisplay.of(choiceText.toString()), ActionRow.of(pickButton));
 
-            if(choice.getType().equals(MantisTileDraftable.TYPE)) {
+            if (choice.getType().equals(MantisTileDraftable.TYPE)) {
                 String tileId = MantisTileDraftable.getItemId(choice.getChoiceKey());
                 TileModel tile = TileHelper.getTileById(tileId);
-                if(tile != null) {
-                    if(tile.getTileBack().equals(TileBack.BLUE)) {
+                if (tile != null) {
+                    if (tile.getTileBack().equals(TileBack.BLUE)) {
                         pContainer = pContainer.withAccentColor(Color.BLUE);
-                    } else if(tile.getTileBack().equals(TileBack.RED)) {
+                    } else if (tile.getTileBack().equals(TileBack.RED)) {
                         pContainer = pContainer.withAccentColor(Color.RED);
                     }
                 }
-            } else if(choice.getType().equals(FactionDraftable.TYPE)) {
+            } else if (choice.getType().equals(FactionDraftable.TYPE)) {
                 FactionModel faction = Mapper.getFaction(choice.getChoiceKey());
-                if(faction != null) {
+                if (faction != null) {
                     List<String> preferredColors = faction.getPreferredColours();
-                    if(preferredColors != null && !preferredColors.isEmpty()) {
+                    if (preferredColors != null && !preferredColors.isEmpty()) {
                         ColorModel color = Mapper.getColor(preferredColors.get(0));
-                        if(color != null) {
+                        if (color != null) {
                             pContainer = pContainer.withAccentColor(color.getPrimaryColor());
                         }
                     }
